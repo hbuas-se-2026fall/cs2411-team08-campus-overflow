@@ -2,9 +2,10 @@ import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { api } from '../api';
 import { useAuth } from '../auth';
+import { EmptyState, ErrorState, LoadingState } from '../components/AsyncState';
 import type { Page, QuestionSummary, SearchResult } from '../types';
 
-export function QuestionListPage() {
+export function QuestionListPage({ courseId }: { courseId?: number } = {}) {
   const { me } = useAuth();
   const [data, setData] = useState<Page<QuestionSummary | SearchResult> | null>(null);
   const [tags, setTags] = useState<{ name: string; questionCount: number }[]>([]);
@@ -13,23 +14,30 @@ export function QuestionListPage() {
   const [sort, setSort] = useState('newest');
   const [unanswered, setUnanswered] = useState(false);
   const [error, setError] = useState('');
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    setLoading(true);
+    setError('');
     api.popularTags().then(setTags).catch(() => undefined);
   }, []);
 
   useEffect(() => {
     const searching = keyword.trim() !== '' || activeTag || unanswered || sort !== 'newest';
-    const promise = searching
+    const promise = courseId !== undefined
+      ? api.questions(1, courseId)
+      : searching
       ? api.search(keyword.trim(), { tag: activeTag, sort, unanswered })
       : api.questions(1);
-    promise.then((r) => { setData(r); setError(''); }).catch((e) => setError(e.message));
-  }, [keyword, activeTag, sort, unanswered]);
+    let active = true;
+    promise.then((r) => { if (active) setData(r); }).catch((e) => { if (active) setError(e.message); }).finally(() => { if (active) setLoading(false); });
+    return () => { active = false; };
+  }, [keyword, activeTag, sort, unanswered, courseId]);
 
   return (
-    <div className="layout">
+    <div className={`layout${courseId ? ' scoped-list' : ''}`}>
       <section>
-        <div className="toolbar">
+        {!courseId && <div className="toolbar">
           <input placeholder="搜索问题（支持中文全文检索）" value={keyword}
                  onChange={(e) => setKeyword(e.target.value)} />
           <select value={sort} onChange={(e) => setSort(e.target.value)}>
@@ -43,16 +51,18 @@ export function QuestionListPage() {
             仅看未回答
           </label>
           {me && <Link className="primary" to="/ask">我要提问</Link>}
-        </div>
+        </div>}
 
         {activeTag && (
           <p className="muted">
             标签筛选：<b>{activeTag}</b> <button onClick={() => setActiveTag(undefined)}>清除</button>
           </p>
         )}
-        {error && <p className="error">{error}</p>}
+        {error && <ErrorState message={error} />}
 
-        <ul className="qlist">
+        {loading && <LoadingState label="正在加载问题" />}
+
+        {!loading && !error && <ul className="qlist">
           {data?.items.map((q) => (
             <li key={q.id}>
               <div className="stats">
@@ -72,11 +82,11 @@ export function QuestionListPage() {
               </div>
             </li>
           ))}
-        </ul>
-        {data && data.items.length === 0 && <p className="muted">没有匹配的问题，换个关键词试试。</p>}
+        </ul>}
+        {!loading && !error && data?.items.length === 0 && <EmptyState title="没有匹配的问题"><span>换个关键词或筛选条件试试。</span></EmptyState>}
       </section>
 
-      <aside>
+      {!courseId && <aside>
         <h3>热门标签</h3>
         <div className="tagrow">
           {tags.map((t) => (
@@ -85,7 +95,7 @@ export function QuestionListPage() {
             </button>
           ))}
         </div>
-      </aside>
+      </aside>}
     </div>
   );
 }
