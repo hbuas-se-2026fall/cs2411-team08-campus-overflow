@@ -27,6 +27,12 @@ public class RedisLoginThrottle implements LoginThrottle {
     }
 
     @Override
+    public long remainingBlockSeconds(String username) {
+        Long ttl = redis.getExpire(key(username));
+        return ttl != null && ttl > 0 ? ttl : 0;
+    }
+
+    @Override
     public void recordFailure(String username) {
         Long count = redis.opsForValue().increment(key(username));
         if (count != null && count == 1L) {

@@ -25,14 +25,14 @@ public class User {
 
     private Long id;
     private final String username;
-    private final String displayName;
+    private String displayName;
     private final String email;
     private final String passwordHash;
     private Role role;
     private UserStatus status;
     private boolean verified;
-    private final String college;
-    private final String className;
+    private String college;
+    private String className;
     private final Instant createdAt;
     private final long version;
 
@@ -103,6 +103,19 @@ public class User {
             throw new BusinessRuleException("ID-1007", "不能禁用自己的账号");
         }
         this.status = UserStatus.DISABLED;
+    }
+
+    /**
+     * 本人修改个人资料。仅开放允许字段（昵称/学院/班级），角色与认证状态不在其列——
+     * 权限调整走 {@link #changeRole}，认证走 {@link #verify}，避免"改昵称顺带提权"。
+     */
+    public void updateProfile(Actor actor, String newDisplayName, String newCollege, String newClassName) {
+        if (actor == null || !actor.is(requireId())) {
+            throw new ForbiddenException("ID-3002", "只能修改本人的资料");
+        }
+        this.displayName = checkDisplayName(newDisplayName);
+        this.college = optional(newCollege, 50);
+        this.className = optional(newClassName, 50);
     }
 
     public boolean canLogin() {

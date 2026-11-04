@@ -28,17 +28,21 @@ public class CourseJpaEntity {
     @Column(name = "teacher_id", nullable = false)
     private long teacherId;
 
+    @Column(nullable = false, length = 16)
+    private String status;
+
     @Column(name = "created_at", nullable = false)
     private Instant createdAt;
 
     protected CourseJpaEntity() {
     }
 
-    public CourseJpaEntity(String code, String name, String term, long teacherId, Instant createdAt) {
+    public CourseJpaEntity(String code, String name, String term, long teacherId, String status, Instant createdAt) {
         this.code = code;
         this.name = name;
         this.term = term;
         this.teacherId = teacherId;
+        this.status = status;
         this.createdAt = createdAt;
     }
 
@@ -47,5 +51,7 @@ public class CourseJpaEntity {
     public String getName() { return name; }
     public String getTerm() { return term; }
     public long getTeacherId() { return teacherId; }
+    public String getStatus() { return status; }
+    public void setStatus(String status) { this.status = status; }
     public Instant getCreatedAt() { return createdAt; }
 }

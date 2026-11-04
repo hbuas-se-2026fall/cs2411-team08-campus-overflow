@@ -75,6 +75,8 @@ management:
 logging:
   level:
     com.campusoverflow: INFO
+  pattern:
+    console: "%d{HH:mm:ss.SSS} %-5level [%thread] [rid=%X{requestId:-}] [actor=%X{actorId:-}] %logger{36} - %msg%n"
 
 co:
   security:
@@ -83,6 +85,14 @@ co:
     login:
       max-failures: 5
       window-seconds: 60
+    # 内部服务调用令牌（/api/internal/**）。生产环境必须用环境变量注入，未注入则启动失败。
+    internal-token: ${CO_INTERNAL_TOKEN:dev-internal-token}
+  idempotency:
+    ttl-hours: 24               # 业务幂等键（co_command_result）的保留时长
+  task:
+    poll-interval-ms: 2000      # 可靠异步任务轮询间隔
+    batch-size: 10
+    max-attempts: 10
   outbox:
     poll-interval-ms: 500
     batch-size: 100
@@ -126,3 +136,4 @@ springdoc:
 co:
   security:
     field-key: ${CO_FIELD_KEY}     # 未注入则启动失败（快速失败优于带着默认密钥上线）
+    internal-token: ${CO_INTERNAL_TOKEN}  # 未注入则启动失败，防止内部接口裸奔

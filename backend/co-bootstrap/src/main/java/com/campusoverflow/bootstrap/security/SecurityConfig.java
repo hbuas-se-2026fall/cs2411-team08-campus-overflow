@@ -5,6 +5,7 @@ import jakarta.servlet.http.HttpServletResponse;
 import java.io.IOException;
 import java.util.LinkedHashMap;
 import java.util.Map;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.http.HttpMethod;
@@ -23,6 +24,7 @@ import org.springframework.security.web.context.RequestAttributeSecurityContextR
 import org.springframework.security.web.context.SecurityContextRepository;
 import org.springframework.security.web.csrf.CookieCsrfTokenRepository;
 import org.springframework.security.web.csrf.CsrfException;
+import org.springframework.security.web.csrf.CsrfFilter;
 
 /**
  * 安全过滤链（质量场景 QS-06/07/08）：
@@ -54,13 +56,18 @@ public class SecurityConfig {
     }
 
     @Bean
-    public SecurityFilterChain securityFilterChain(HttpSecurity http, SecurityContextRepository contextRepository)
+    public SecurityFilterChain securityFilterChain(HttpSecurity http, SecurityContextRepository contextRepository,
+                                                   ObjectMapper objectMapper,
+                                                   @Value("${co.security.internal-token}") String internalToken)
             throws Exception {
         http
                 .csrf(csrf -> csrf
                         .csrfTokenRepository(CookieCsrfTokenRepository.withHttpOnlyFalse())
-                        .csrfTokenRequestHandler(new SpaCsrfTokenRequestHandler()))
+                        .csrfTokenRequestHandler(new SpaCsrfTokenRequestHandler())
+                        // 内部接口由 InternalAuthFilter 用令牌保护，不走浏览器 CSRF 流程
+                        .ignoringRequestMatchers("/api/internal/**"))
                 .addFilterAfter(new CsrfCookieFilter(), BasicAuthenticationFilter.class)
+                .addFilterBefore(new InternalAuthFilter(internalToken, objectMapper), CsrfFilter.class)
                 .securityContext(sc -> sc.securityContextRepository(contextRepository))
                 .formLogin(AbstractHttpConfigurer::disable)
                 .httpBasic(AbstractHttpConfigurer::disable)
@@ -71,6 +78,8 @@ public class SecurityConfig {
                                 "/api/v1/search/**", "/api/v1/leaderboard", "/api/v1/users/*/reputation",
                                 "/api/v1/courses", "/api/v1/courses/*/members").permitAll()
                         .requestMatchers("/api/v1/admin/**").hasRole("ADMIN")
+                        // 内部接口的令牌校验由 InternalAuthFilter 完成（匿名调用会被它拒绝）
+                        .requestMatchers("/api/internal/**").permitAll()
                         .requestMatchers("/actuator/health/**", "/actuator/info", "/actuator/prometheus").permitAll()
                         .requestMatchers("/v3/api-docs/**", "/swagger-ui/**", "/swagger-ui.html").permitAll()
                         .requestMatchers("/error").permitAll()
@@ -106,6 +115,10 @@ public class SecurityConfig {
         body.put("status", status.value());
         body.put("detail", detail);
         body.put("code", code);
+        String requestId = org.slf4j.MDC.get(com.campusoverflow.bootstrap.web.RequestIdFilter.MDC_REQUEST_ID);
+        if (requestId != null) {
+            body.put("requestId", requestId);
+        }
         res.setStatus(status.value());
         res.setContentType("application/problem+json;charset=UTF-8");
         objectMapper.writeValue(res.getOutputStream(), body);

@@ -73,4 +73,40 @@ class UserTest {
         assertThatThrownBy(() -> PasswordPolicy.validate("onlyletters")).isInstanceOf(BusinessRuleException.class);
         PasswordPolicy.validate("Passw0rd!");
     }
+
+    @Test
+    void ownerUpdatesOwnProfileWithinAllowedFields() {
+        User u = newStudent();
+        u.assignId(2);
+        u.updateProfile(student, "小明同学", "软件工程学院", "软工2302");
+        assertThat(u.displayName()).isEqualTo("小明同学");
+        assertThat(u.college()).isEqualTo("软件工程学院");
+        assertThat(u.className()).isEqualTo("软工2302");
+        // 资料修改不得影响身份字段
+        assertThat(u.role()).isEqualTo(Role.STUDENT);
+        assertThat(u.verified()).isFalse();
+        assertThat(u.email()).isEqualTo("ming@campus.edu");
+    }
+
+    @Test
+    void onlyOwnerCanUpdateProfile() {
+        User u = newStudent();
+        u.assignId(2);
+        // 他人（包括管理员）不能代改
+        assertThatThrownBy(() -> u.updateProfile(admin, "被改名", null, null))
+                .isInstanceOf(ForbiddenException.class);
+        assertThatThrownBy(() -> u.updateProfile(null, "被改名", null, null))
+                .isInstanceOf(ForbiddenException.class);
+        assertThat(u.displayName()).isEqualTo("小明");
+    }
+
+    @Test
+    void profileUpdateStillValidatesDisplayName() {
+        User u = newStudent();
+        u.assignId(2);
+        assertThatThrownBy(() -> u.updateProfile(student, "小 明", null, null))
+                .isInstanceOf(BusinessRuleException.class);
+        assertThatThrownBy(() -> u.updateProfile(student, "x", null, null))
+                .isInstanceOf(BusinessRuleException.class);
+    }
 }

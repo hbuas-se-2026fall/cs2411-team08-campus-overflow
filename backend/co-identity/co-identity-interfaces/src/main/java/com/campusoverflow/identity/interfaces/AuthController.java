@@ -2,6 +2,7 @@ package com.campusoverflow.identity.interfaces;
 
 import com.campusoverflow.identity.application.AuthenticationAuditService;
 import com.campusoverflow.identity.application.LoginThrottle;
+import com.campusoverflow.identity.application.LoginThrottledException;
 import com.campusoverflow.identity.application.MeView;
 import com.campusoverflow.identity.application.RegisterUserCommand;
 import com.campusoverflow.identity.application.UserQueryService;
@@ -21,7 +22,6 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.authentication.BadCredentialsException;
-import org.springframework.security.authentication.LockedException;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.AuthenticationException;
@@ -83,7 +83,7 @@ public class AuthController {
                         HttpServletResponse response) {
         if (throttle.isBlocked(req.username())) {
             authAudit.loginFailed(req.username(), "THROTTLED");
-            throw new LockedException("登录失败次数过多，请 1 分钟后再试");
+            throw new LoginThrottledException(throttle.remainingBlockSeconds(req.username()));
         }
         Authentication auth;
         try {
