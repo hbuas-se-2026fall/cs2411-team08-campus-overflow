@@ -11,6 +11,12 @@
     <artifactId>co-identity-domain</artifactId>
     <packaging>jar</packaging>
     <name>Identity 身份与认证 :: domain（纯 Java）</name>
+
+    <properties>
+        <!-- 按模块设置覆盖率门槛（指导书 8.3）：Identity 上下文已于 B01–B03 完成，实测行覆盖 86%，
+             故先行收紧到 0.70；根 POM 仍保持 0，待 S3 统一切换（见 ADR-009）。只升不降。 -->
+        <domain.coverage.minimum>0.70</domain.coverage.minimum>
+    </properties>
     <dependencies>
         <dependency>
             <groupId>com.campusoverflow</groupId>
