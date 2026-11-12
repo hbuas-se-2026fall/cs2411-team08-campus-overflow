@@ -22,17 +22,24 @@ concurrency:
 env:
   # 渐进式门禁范围：只包含“本 Sprint 计划必须为绿”的模块，逗号分隔。
   # 由质量负责人在每个 Sprint 计划会后更新，随 PR 评审合入。
-  #   S0（当前）：co-shared-kernel + Identity 全上下文（对应 B01–B03 已完成）
-  #   S1：追加 co-qa/co-qa-domain、co-qa/co-qa-application
+  #   S0（已完成）：co-shared-kernel + Identity 全上下文（对应 B01–B03）
+  #   S1（当前）：追加 co-qa/co-qa-domain、co-qa/co-qa-application（对应 B04）
   #   S2：追加 co-reputation/co-reputation-domain、co-reputation/co-reputation-application
   #   S3：删除本变量，恢复全量 mvn test / verify（集成测试同时转硬门禁）
+  #
+  # B04 由两次提交落地，共用同一套门禁，不因“加了新需求”再扩大范围：
+  #   B04-1 清掉 Q&A 全部 TODO（不加端点、不加列）→ 本文件把 co-qa 两模块写进范围，
+  #         此刻起 co-qa 的既有测试由“允许失败”变为“必须绿”；
+  #   B04-2 叠加新需求（status 列、撤销采纳、复核、认证历史、回答来源、详情分页）→
+  #         门禁不变，新增行为靠新增用例守住；co-qa-infrastructure / co-qa-interfaces
+  #         当前没有测试，纳入只会增加构建时间而不增加约束，等它们有测试再进范围。
   #
   # 注意 1：-pl 不会自动展开父聚合模块（-pl co-identity 只构建 pom 本身），
   #         因此必须列到具体子模块，否则会出现“跑了个寂寞”的假绿。
   # 注意 2：不要把 co-bootstrap 加入本列表。它依赖全部上下文，-am 会把
   #         Q&A/Reputation/Discovery 一起拉进反应堆并执行其失败测试；
   #         B01 的平台基础单测在“架构约束与平台基础单测”步骤中运行。
-  SPRINT_MODULES: "co-shared-kernel,co-identity/co-identity-domain,co-identity/co-identity-application,co-identity/co-identity-infrastructure,co-identity/co-identity-interfaces"
+  SPRINT_MODULES: "co-shared-kernel,co-identity/co-identity-domain,co-identity/co-identity-application,co-identity/co-identity-infrastructure,co-identity/co-identity-interfaces,co-qa/co-qa-domain,co-qa/co-qa-application"
 
 jobs:
   backend:
@@ -53,7 +60,27 @@ jobs:
       - name: 编译
         run: mvn -B -f backend/pom.xml clean compile
 
+      # F04 依赖的列表契约：标签/排序/未解决筛选必须由后端 SQL 完成，前端只在当前页过滤是禁止的
+      # （F04 计划第 98、103 行；B07 的服务端过滤要求同源）。没有前端测试框架时，这是唯一能自动
+      # 拦住“前端接了不存在的参数”的手段；S4 有 Playwright 后改用真实契约测试。
+      # 放在后端 job 而不是前端 job：检查对象是后端源码，红灯应归因到后端。
+      - name: F04 契约守卫（列表筛选与人工回答数）
+        run: |
+          set +e
+          CTRL=backend/co-qa/co-qa-interfaces/src/main/java/com/campusoverflow/qa/interfaces/QuestionController.java
+          VIEW=backend/co-qa/co-qa-application/src/main/java/com/campusoverflow/qa/application/query/QuestionSummaryView.java
+          fail=0
+          for p in tag sort unanswered; do
+            grep -qE "@RequestParam.*\b$p\b" "$CTRL" \
+              || { echo "::error file=$CTRL::F04 需要列表参数 $p（筛选必须在服务端执行）"; fail=1; }
+          done
+          grep -q "humanAnswerCount" "$VIEW" \
+            || { echo "::error file=$VIEW::F04 需要 humanAnswerCount，否则 AI 回答会被显示成人工已解决"; fail=1; }
+          exit $fail
+
       # 阶段 2：单元测试（仅 Sprint 范围：领域层 + 应用层，毫秒级，无外部依赖）
+      # S1 起 Q&A 的既有用例（QuestionTest / AnswerTest / VoteAndCommentTest /
+      # AnswerAndVoteServiceTest）也在这条命令里：B04-1 做完，这里转绿即为“验收单全部兑现”。
       - name: 单元测试（Sprint 范围）
         run: mvn -B -f backend/pom.xml test -pl "$SPRINT_MODULES" -am
 
@@ -64,18 +91,55 @@ jobs:
         run: mvn -B -f backend/pom.xml test -pl co-bootstrap -am -Dtest='ArchitectureTest,RequestIdFilterTest,InternalAuthFilterTest' -Dsurefire.failIfNoSpecifiedTests=false
 
       # 阶段 4：领域层覆盖率门禁（仅 Sprint 范围）。阈值由各领域模块的 domain.coverage.minimum 决定：
-      # co-identity-domain 已设 0.70（实测 86%），根 POM 仍为 0；
-      # S1 起在 co-qa-domain 等模块的 pom.xml 中各自覆盖为 0.70（指导书 8.3）
+      # co-identity-domain 已设 0.70（实测 86%）；S1 起 co-qa-domain 也设 0.70（指导书 8.3）。
+      # 注意：B04-1 实现完成前该步骤会红，属预期——阈值随 B04-1 一起提交，不靠事后追认。
       - name: 覆盖率门禁（Sprint 范围）
         run: mvn -B -f backend/pom.xml verify -DskipITs -Djacoco.skip=false -pl "$SPRINT_MODULES" -am
+
+      # 把各模块行覆盖率写进运行摘要，PR 的“测试证据”可直接引用，不必翻 artifact
+      # 摘要失败不影响门禁结论，故 continue-on-error（真正的判定在上一阶段的 jacoco check）
+      - name: 覆盖率摘要
+        if: always()
+        continue-on-error: true
+        run: |
+          python3 - <<'PY' >> "$GITHUB_STEP_SUMMARY"
+          import csv, pathlib
+          rows = []
+          for f in sorted(pathlib.Path("backend").glob("co-*/**/target/site/jacoco/jacoco.csv")):
+              covered = missed = 0
+              for r in csv.DictReader(f.open(encoding="utf-8")):
+                  covered += int(r["LINE_COVERED"])
+                  missed += int(r["LINE_MISSED"])
+              if covered + missed:
+                  parts = f.parts
+                  module = "/".join(parts[1:parts.index("target")])
+                  rows.append((module, covered, covered + missed))
+          print("### 领域层行覆盖率（Sprint 范围）\n")
+          if rows:
+              print("| 模块 | 行覆盖 |")
+              print("| --- | --- |")
+              for module, covered, total in rows:
+                  print(f"| {module} | {covered}/{total} = {covered / total:.1%} |")
+              print("\n> 未在 pom 中覆盖 `domain.coverage.minimum` 的模块只统计、不参与判定。")
+          else:
+              print("无覆盖率数据：编译或测试阶段可能已失败。")
+          PY
 
       # 阶段 5：集成测试（Testcontainers 拉起真实 MySQL + Redis）
       # 【省用量 2】耗时阶段只在 push 时运行，PR 上只做编译/单测/ArchUnit/覆盖率
       # 【渐进门禁】S0–S2 允许失败（continue-on-error），S3 移除此行使其成为硬门禁
+      # 注意：B04-2 新增 status 列与认证历史表，迁移写错不会在这里拦住合并（本步骤允许失败），
+      #       B04-2 合并前必须在本地跑一次 docker compose + CampusOverflowFlowIT。
       - name: 集成测试（暂允许失败）
+        id: it
         if: github.event_name == 'push'
         continue-on-error: true
         run: mvn -B -f backend/pom.xml verify -Dsurefire.skip=true
+
+      # 把“允许失败”的运行结果显示出来：Sprint 评审要记录失败数量趋势，不能让黄色警告变成噪声
+      - name: 记录集成测试状态
+        if: always() && github.event_name == 'push'
+        run: echo "集成测试结果：**${{ steps.it.outcome }}**（S1 允许失败，S3 转硬门禁）" >> "$GITHUB_STEP_SUMMARY"
 
       - name: 归档测试报告
         if: always()
@@ -87,8 +151,34 @@ jobs:
   frontend:
     name: 前端构建
     runs-on: ubuntu-latest
+    # F04（问题列表、筛选与搜索）的门禁构成，以及为什么只有这些：
+    #   能做硬门禁的：TypeScript 类型、可构建、构建产物存在、包体积预算、
+    #                  “列表摘要/高亮不得注入 HTML”（F04 第 101 行、7.5.2 安全检查项）；
+    #   不能自动化的：URL 状态恢复、翻页与筛选组合、旧请求不覆盖新结果、两种空态文案——
+    #                  这些需要浏览器测试，S4 才引入，本 Sprint 用 PR 里的人工作查记录代替。
+    # 注意：job 名称是分支保护里的必需检查项，不要改名。
     steps:
       - uses: actions/checkout@v4
+
+      # 先跑秒级守卫，再装依赖：违反规则时不必等 npm install
+      - name: F04 安全渲染守卫
+        run: |
+          set +e
+          fail=0
+          # 1) 摘要与高亮必须按文本渲染，不能把 excerpt/highlight 塞进 dangerouslySetInnerHTML
+          if grep -rnE "dangerouslySetInnerHTML[^\n]*(excerpt|highlight|snippet)" frontend/src; then
+            echo "::error::F04 列表摘要与高亮必须纯文本渲染，不得注入 HTML（后端 excerpt 已净化）"
+            fail=1
+          fi
+          # 2) 列表页整体禁止注入 HTML；详情页 bodyHtml 由后端 ContentRenderer 净化，不在此列
+          for f in frontend/src/pages/QuestionListPage.tsx frontend/src/pages/CourseQuestionsPage.tsx; do
+            if [ -f "$f" ] && grep -q "dangerouslySetInnerHTML" "$f"; then
+              echo "::error file=$f::列表页使用了 dangerouslySetInnerHTML，F04 要求文本安全渲染"
+              fail=1
+            fi
+          done
+          exit $fail
+
       - uses: actions/setup-node@v4
         with:
           node-version: "20"
@@ -103,6 +193,27 @@ jobs:
       - name: 构建
         working-directory: frontend
         run: npm run build
+
+      # 构建“成功”不等于产物可用：缺 index.html 说明构建配置被改坏；体积暴涨通常是误引了重依赖
+      - name: 产物与体积校验
+        run: |
+          set -e
+          test -f frontend/dist/index.html || { echo "::error::构建未产出 dist/index.html"; exit 1; }
+          # 预算取 1.5 MB（原始大小）：当前 React 18 + Router 的量级约 200 KB，留足余量，
+          # 只在误引 echarts/lodash 全量等重依赖时触发，不作为常规优化指标。
+          js_bytes=$(find frontend/dist -name "*.js" -printf "%s\n" | awk '{s+=$1} END {print s+0}')
+          js_kb=$((js_bytes / 1024))
+          {
+            echo "### 前端构建产物"
+            echo ""
+            echo "| 项 | 值 |"
+            echo "| --- | --- |"
+            echo "| JS 合计 | ${js_kb} KB（预算 1536 KB） |"
+          } >> "$GITHUB_STEP_SUMMARY"
+          if [ "$js_bytes" -gt 1572864 ]; then
+            echo "::error::JS 产物 ${js_kb} KB 超过 1.5 MB 预算，请检查是否引入了重依赖"
+            exit 1
+          fi
 
   images:
     name: 容器镜像构建
