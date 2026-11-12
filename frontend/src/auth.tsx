@@ -1,10 +1,11 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
-import { api } from './api';
+import { ApiError, api } from './api';
 import type { Me } from './types';
 
 interface AuthState {
   me: Me | null;
   loading: boolean;
+  sessionError: string;
   login: (username: string, password: string) => Promise<void>;
   logout: () => Promise<void>;
   refresh: () => Promise<void>;
@@ -15,12 +16,19 @@ const AuthContext = createContext<AuthState | null>(null);
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [me, setMe] = useState<Me | null>(null);
   const [loading, setLoading] = useState(true);
+  const [sessionError, setSessionError] = useState('');
 
   const refresh = useCallback(async () => {
     try {
       setMe(await api.me());
-    } catch {
-      setMe(null);      // 401 表示未登录，属于正常状态
+      setSessionError('');
+    } catch (error) {
+      if (error instanceof ApiError && error.status === 401) {
+        setMe(null);
+        setSessionError('');
+      } else {
+        setSessionError((error as Error).message);
+      }
     } finally {
       setLoading(false);
     }
@@ -30,13 +38,26 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     api.csrf().catch(() => undefined).then(refresh);
   }, [refresh]);
 
+  useEffect(() => {
+    const clear = () => setMe(null);
+    window.addEventListener('auth:unauthorized', clear);
+    return () => window.removeEventListener('auth:unauthorized', clear);
+  }, []);
+
   const value = useMemo<AuthState>(() => ({
     me,
     loading,
-    login: async (username, password) => setMe(await api.login(username, password)),
+    sessionError,
+    login: async (username, password) => {
+      setMe(await api.login(username, password));
+      setSessionError('');
+    },
     logout: async () => {
-      await api.logout();
-      setMe(null);
+      try {
+        await api.logout();
+      } finally {
+        setMe(null);
+      }
     },
     refresh,
   }), [me, loading, refresh]);
