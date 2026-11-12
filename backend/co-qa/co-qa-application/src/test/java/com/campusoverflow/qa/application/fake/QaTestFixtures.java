@@ -168,7 +168,13 @@ public final class QaTestFixtures {
 
         @Override
         public Optional<CourseSummary> findCourse(long courseId) {
-            return Optional.of(new CourseSummary(courseId, "CS2001", "数据结构", "2026-秋", 100L));
+            return Optional.of(new CourseSummary(courseId, "CS2001", "数据结构", "2026-秋", "OPEN", 100L));
+        }
+
+        @Override
+        public boolean isCourseMember(long userId, long courseId) {
+            // 问答测试默认全员为课程成员；成员资格校验在 Identity 上下文有自己的领域测试
+            return true;
         }
 
         @Override

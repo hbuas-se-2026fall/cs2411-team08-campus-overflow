@@ -7,3 +7,5 @@ dist/
 *.iml
 .DS_Store
 .env
+.workbuddy/
+.slidep/

@@ -5,6 +5,7 @@ import com.campusoverflow.shared.security.ActorAware;
 import java.lang.reflect.ParameterizedType;
 import java.lang.reflect.Type;
 import java.util.Optional;
+import org.slf4j.MDC;
 import org.springframework.core.MethodParameter;
 import org.springframework.security.authentication.AuthenticationCredentialsNotFoundException;
 import org.springframework.security.core.Authentication;
@@ -37,6 +38,9 @@ public class ActorArgumentResolver implements HandlerMethodArgumentResolver {
                                   NativeWebRequest webRequest, WebDataBinderFactory binderFactory) {
         Authentication auth = SecurityContextHolder.getContext().getAuthentication();
         Actor actor = auth != null && auth.getPrincipal() instanceof ActorAware aware ? aware.toActor() : null;
+        if (actor != null) {
+            MDC.put(RequestIdFilter.MDC_ACTOR_ID, String.valueOf(actor.userId()));
+        }
         if (parameter.getParameterType() == Optional.class) {
             return Optional.ofNullable(actor);
         }

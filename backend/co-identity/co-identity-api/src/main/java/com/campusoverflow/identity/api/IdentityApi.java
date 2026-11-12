@@ -24,4 +24,10 @@ public interface IdentityApi {
      * 管理员；或该课程的教师/助教。courseId 为 null（未关联课程的问题）时，全局教师角色亦可。
      */
     boolean canManageCourse(long userId, Long courseId);
+
+    /**
+     * 是否为该课程的<b>有效</b>成员（"成员可参与本课程问答"的判定入口）。
+     * 已被移除（REMOVED）的成员返回 false，立即失去课程内的读取与参与权限。
+     */
+    boolean isCourseMember(long userId, long courseId);
 }

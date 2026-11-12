@@ -51,7 +51,13 @@ public class IdentityApiImpl implements IdentityApi {
     @Override
     public Optional<CourseSummary> findCourse(long courseId) {
         return courses.findById(courseId)
-                .map(c -> new CourseSummary(c.id(), c.code(), c.name(), c.term(), c.teacherId()));
+                .map(c -> new CourseSummary(c.id(), c.code(), c.name(), c.term(), c.status().name(), c.teacherId()));
+    }
+
+    @Override
+    public boolean isCourseMember(long userId, long courseId) {
+        // findMember 仅返回 ACTIVE 成员，已移除成员自动失去资格
+        return courses.findMember(courseId, userId).isPresent();
     }
 
     @Override
