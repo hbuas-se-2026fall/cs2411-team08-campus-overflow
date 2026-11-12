@@ -30,8 +30,17 @@ public class Comment {
 
     public static Comment post(TargetType targetType, long targetId, long questionId, long authorId, Comment parent,
                                String body, Instant now) {
-        // TODO(S2)：实现 Comment.post——参考领域单元测试与 arc42 文档中的业务规则
-        throw new UnsupportedOperationException("TODO(S2)：Comment.post 尚未实现");
+        String text = Guard.requireText(body, 1, 600, "QA-1006", "评论");
+        if (parent != null) {
+            if (parent.targetType() != targetType || parent.targetId() != targetId) {
+                throw new BusinessRuleException("QA-1014", "回复关系不能跨越目标");
+            }
+            if (parent.parentId() != null) {
+                throw new BusinessRuleException("QA-1017", "评论最多允许一层回复");
+            }
+        }
+        return new Comment(null, targetType, targetId, questionId, authorId,
+                parent == null ? null : parent.id(), text, now);
     }
 
     public static Comment reconstitute(Long id, TargetType targetType, long targetId, long questionId, long authorId,

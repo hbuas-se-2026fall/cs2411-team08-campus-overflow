@@ -2,6 +2,7 @@ package com.campusoverflow.qa.application;
 
 import com.campusoverflow.qa.api.QaQueryApi;
 import com.campusoverflow.qa.api.QuestionRef;
+import com.campusoverflow.qa.domain.Question;
 import com.campusoverflow.qa.domain.QuestionRepository;
 import java.util.Optional;
 import org.springframework.stereotype.Service;
@@ -19,7 +20,13 @@ public class QaQueryApiImpl implements QaQueryApi {
 
     @Override
     public Optional<QuestionRef> findQuestion(long questionId) {
-        // TODO(S2)：实现 QaQueryApiImpl.findQuestion——参考领域单元测试与 arc42 文档中的业务规则
-        throw new UnsupportedOperationException("TODO(S2)：QaQueryApiImpl.findQuestion 尚未实现");
+        // 走领域仓储而非读模型：QuestionRef 带 deleted 标记，需要能感知已删除问题
+        return questions.findById(questionId)
+                .map(this::toRef);
+    }
+
+    private QuestionRef toRef(Question q) {
+        return new QuestionRef(q.id(), q.authorId(), q.courseId(), q.title().value(), q.acceptedAnswerId(),
+                q.isDeleted());
     }
 }
