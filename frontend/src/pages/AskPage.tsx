@@ -1,6 +1,6 @@
 import ReactMarkdown from 'react-markdown';
 import { useEffect, useState } from 'react';
-import { Link, unstable_useBlocker as useBlocker, useBeforeUnload, useNavigate, useParams, useSearchParams } from 'react-router-dom';
+import { Link, useBlocker, useBeforeUnload, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { api } from '../api';
 import { useAuth } from '../auth';
 import { useCourse } from '../course';
