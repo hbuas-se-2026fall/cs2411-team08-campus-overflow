@@ -70,9 +70,21 @@ public class AnswerController {
         return ResponseEntity.noContent().build();
     }
 
+    @Operation(summary = "撤销教师认证（带原因，历史留痕并冲正奖励）")
+    @DeleteMapping("/answers/{answerId}/endorsement")
+    public ResponseEntity<Void> revokeEndorsement(@Parameter(hidden = true) Actor actor,
+                                                  @PathVariable long answerId,
+                                                  @Valid @RequestBody EndorsementRevokeRequest req) {
+        answers.revokeEndorsement(actor, answerId, req.reason());
+        return ResponseEntity.noContent().build();
+    }
+
     public record AnswerRequest(@NotBlank @Size(max = 30000) String body) {
     }
 
     public record AcceptRequest(@NotNull Long answerId) {
+    }
+
+    public record EndorsementRevokeRequest(@NotBlank @Size(max = 500) String reason) {
     }
 }

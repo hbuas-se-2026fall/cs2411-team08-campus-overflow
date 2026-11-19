@@ -14,6 +14,7 @@ import com.campusoverflow.shared.event.EventIds;
 import com.campusoverflow.shared.event.IntegrationEventPublisher;
 import com.campusoverflow.shared.security.Actor;
 import java.time.Clock;
+import java.time.Instant;
 import java.util.Optional;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -48,12 +49,70 @@ public class VoteService {
 
     @Transactional
     public VoteResult cast(Actor actor, TargetType type, long targetId, int value) {
-        // TODO(S2)：实现 VoteService.cast——参考领域单元测试与 arc42 文档中的业务规则
-        throw new UnsupportedOperationException("TODO(S2)：VoteService.cast 尚未实现");
+        Target target = resolve(type, targetId);
+        long voterId = actor.userId();
+        Instant now = clock.instant();
+        Optional<Vote> existing = votes.find(voterId, type, targetId);
+
+        if (existing.isEmpty()) {
+            Vote vote = Vote.cast(voterId, target.authorId(), type, targetId, value, now);
+            votes.save(vote);
+            applyScoreDelta(type, targetId, value);
+            publishVoteEvent(type, targetId, target, voterId, 0, value, now);
+            return new VoteResult(value, value);
+        }
+        Vote vote = existing.get();
+        if (value == vote.value()) {
+            return new VoteResult(vote.value(), 0); // 同值重复投票：幂等，不重发事件
+        }
+        if (value == 0) {
+            votes.delete(vote);
+            applyScoreDelta(type, targetId, -vote.value());
+            publishVoteEvent(type, targetId, target, voterId, vote.value(), 0, now);
+            return new VoteResult(0, -vote.value());
+        }
+        int old = vote.change(value, now);
+        votes.save(vote);
+        applyScoreDelta(type, targetId, value - old);
+        publishVoteEvent(type, targetId, target, voterId, old, value, now);
+        return new VoteResult(value, value - old);
     }
 
     private Target resolve(TargetType type, long targetId) {
-        // TODO(S2)：实现 VoteService.resolve——参考领域单元测试与 arc42 文档中的业务规则
-        throw new UnsupportedOperationException("TODO(S2)：VoteService.resolve 尚未实现");
+        return switch (type) {
+            case QUESTION -> {
+                Question q = questions.findById(targetId)
+                        .orElseThrow(() -> new NotFoundException("QA-2004", "问题不存在"));
+                if (q.isDeleted()) {
+                    throw new BusinessRuleException("QA-1003", "问题已删除");
+                }
+                yield new Target(q.authorId(), q.id());
+            }
+            case ANSWER -> {
+                Answer a = answers.findById(targetId)
+                        .orElseThrow(() -> new NotFoundException("QA-2006", "回答不存在"));
+                if (a.isDeleted()) {
+                    throw new BusinessRuleException("QA-1016", "回答已删除");
+                }
+                yield new Target(a.authorId(), a.questionId());
+            }
+        };
+    }
+
+    private void applyScoreDelta(TargetType type, long targetId, int delta) {
+        if (delta == 0) {
+            return;
+        }
+        if (type == TargetType.QUESTION) {
+            questions.adjustScore(targetId, delta);
+        } else {
+            answers.adjustScore(targetId, delta);
+        }
+    }
+
+    private void publishVoteEvent(TargetType type, long targetId, Target target, long voterId, int oldValue,
+                                  int newValue, Instant now) {
+        events.publish(new VoteCastEvent(EventIds.next(), now, type.name(), targetId, target.authorId(), voterId,
+                target.questionId(), oldValue, newValue));
     }
 }

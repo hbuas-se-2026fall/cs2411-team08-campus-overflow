@@ -20,7 +20,8 @@ public interface QaReadModel {
 
     Optional<QuestionRow> findQuestion(long questionId);
 
-    List<AnswerRow> findAnswers(long questionId);
+    /** 回答分页：采纳答案由 SQL 保证固定在第一页首位，其余按人工质量序排列。 */
+    PageResult<AnswerRow> findAnswers(long questionId, PageRequest page);
 
     List<CommentRow> findComments(long questionId);
 

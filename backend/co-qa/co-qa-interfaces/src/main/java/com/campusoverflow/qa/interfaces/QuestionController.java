@@ -1,8 +1,10 @@
 package com.campusoverflow.qa.interfaces;
 
+import com.campusoverflow.qa.application.command.AnswerCommandService;
 import com.campusoverflow.qa.application.command.EditQuestionCommand;
 import com.campusoverflow.qa.application.command.PostQuestionCommand;
 import com.campusoverflow.qa.application.command.QuestionCommandService;
+import com.campusoverflow.qa.application.command.ReviewAcceptanceCommand;
 import com.campusoverflow.qa.application.query.QuestionDetailView;
 import com.campusoverflow.qa.application.query.QuestionQueryService;
 import com.campusoverflow.qa.application.query.QuestionSummaryView;
@@ -37,10 +39,13 @@ import org.springframework.web.bind.annotation.RestController;
 public class QuestionController {
 
     private final QuestionCommandService commands;
+    private final AnswerCommandService answerCommands;
     private final QuestionQueryService queries;
 
-    public QuestionController(QuestionCommandService commands, QuestionQueryService queries) {
+    public QuestionController(QuestionCommandService commands, AnswerCommandService answerCommands,
+                              QuestionQueryService queries) {
         this.commands = commands;
+        this.answerCommands = answerCommands;
         this.queries = queries;
     }
 
@@ -60,11 +65,13 @@ public class QuestionController {
         return ResponseEntity.status(HttpStatus.CREATED).body(Map.of("id", id));
     }
 
-    @Operation(summary = "问题详情（含回答、评论、我的投票与可执行操作）")
+    @Operation(summary = "问题详情（含分页回答、评论、我的投票与可执行操作）")
     @GetMapping("/{questionId}")
     public QuestionDetailView detail(@PathVariable long questionId,
-                                     @Parameter(hidden = true) Optional<Actor> actor) {
-        return queries.detail(questionId, actor.orElse(null));
+                                     @Parameter(hidden = true) Optional<Actor> actor,
+                                     @RequestParam(defaultValue = "1") int answerPage,
+                                     @RequestParam(defaultValue = "20") int answerSize) {
+        return queries.detail(questionId, actor.orElse(null), answerPage, answerSize);
     }
 
     @Operation(summary = "编辑问题")
@@ -82,9 +89,37 @@ public class QuestionController {
         return ResponseEntity.noContent().build();
     }
 
+    @Operation(summary = "撤销采纳（提问者或课程教师/助教），奖励由声誉上下文冲正")
+    @DeleteMapping("/{questionId}/accepted-answer")
+    public ResponseEntity<Void> unaccept(@Parameter(hidden = true) Actor actor, @PathVariable long questionId) {
+        answerCommands.unaccept(actor, questionId);
+        return ResponseEntity.noContent().build();
+    }
+
+    @Operation(summary = "教师复核错误采纳（带理由与预期版本，通过后撤销采纳）")
+    @PostMapping("/{questionId}/acceptance-reviews")
+    public ResponseEntity<Map<String, Long>> reviewAcceptance(@Parameter(hidden = true) Actor actor,
+                                                              @PathVariable long questionId,
+                                                              @Valid @RequestBody ReviewAcceptanceRequest req) {
+        long id = answerCommands.reviewAcceptance(actor, questionId,
+                new ReviewAcceptanceCommand(req.expectedVersion(), req.reason()));
+        return ResponseEntity.status(HttpStatus.CREATED).body(Map.of("id", id));
+    }
+
+    @Operation(summary = "教师关闭问题（关闭后不可再回答、采纳）")
+    @PostMapping("/{questionId}/close")
+    public ResponseEntity<Void> close(@Parameter(hidden = true) Actor actor, @PathVariable long questionId) {
+        commands.close(actor, questionId);
+        return ResponseEntity.noContent().build();
+    }
+
     public record QuestionRequest(Long courseId,
                                   @NotBlank @Size(max = 150) String title,
                                   @NotBlank @Size(max = 30000) String body,
                                   @NotNull @Size(min = 1, max = 5) List<String> tags) {
+    }
+
+    public record ReviewAcceptanceRequest(long expectedVersion,
+                                           @NotBlank @Size(max = 500) String reason) {
     }
 }

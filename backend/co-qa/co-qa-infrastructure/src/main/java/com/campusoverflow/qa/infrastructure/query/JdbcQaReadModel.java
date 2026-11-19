@@ -28,7 +28,7 @@ public class JdbcQaReadModel implements QaReadModel {
 
     private static final String QUESTION_COLUMNS = """
             id, author_id, course_id, title, %s AS body, accepted_answer_id, score, answer_count, view_count,
-            created_at, updated_at
+            created_at, updated_at, status
             """;
 
     private final NamedParameterJdbcTemplate jdbc;
@@ -58,14 +58,23 @@ public class JdbcQaReadModel implements QaReadModel {
     }
 
     @Override
-    public List<AnswerRow> findAnswers(long questionId) {
-        return jdbc.query("""
-                        SELECT id, author_id, body, score, endorsed_by, created_at, updated_at
+    public PageResult<AnswerRow> findAnswers(long questionId, PageRequest page) {
+        MapSqlParameterSource p = new MapSqlParameterSource().addValue("qid", questionId)
+                .addValue("limit", page.size()).addValue("offset", page.offset());
+        Long total = jdbc.queryForObject("""
+                SELECT COUNT(*) FROM qa_answer WHERE question_id = :qid AND deleted_at IS NULL
+                """, p, Long.class);
+        List<AnswerRow> rows = jdbc.query("""
+                        SELECT id, author_id, body, score, endorsed_by, created_at, updated_at, source
                         FROM qa_answer WHERE question_id = :qid AND deleted_at IS NULL
-                        """, new MapSqlParameterSource("qid", questionId),
+                        ORDER BY (id = (SELECT accepted_answer_id FROM qa_question WHERE id = :qid)) DESC,
+                                 (endorsed_by IS NOT NULL) DESC, score DESC, created_at, id
+                        LIMIT :limit OFFSET :offset
+                        """, p,
                 (rs, i) -> new AnswerRow(rs.getLong("id"), rs.getLong("author_id"), rs.getString("body"),
                         rs.getInt("score"), nullableLong(rs, "endorsed_by"), instant(rs, "created_at"),
-                        instant(rs, "updated_at")));
+                        instant(rs, "updated_at"), rs.getString("source")));
+        return new PageResult<>(rows, total == null ? 0 : total, page.page(), page.size());
     }
 
     @Override
@@ -115,14 +124,14 @@ public class JdbcQaReadModel implements QaReadModel {
                 });
         return rows.stream().map(r -> new QuestionRow(r.id(), r.authorId(), r.courseId(), r.title(), r.body(),
                 tags.getOrDefault(r.id(), List.of()), r.acceptedAnswerId(), r.score(), r.answerCount(),
-                r.viewCount(), r.createdAt(), r.updatedAt())).toList();
+                r.viewCount(), r.createdAt(), r.updatedAt(), r.status())).toList();
     }
 
     private static QuestionRow mapQuestion(ResultSet rs, List<String> tags) throws SQLException {
         return new QuestionRow(rs.getLong("id"), rs.getLong("author_id"), nullableLong(rs, "course_id"),
                 rs.getString("title"), rs.getString("body"), tags, nullableLong(rs, "accepted_answer_id"),
                 rs.getInt("score"), rs.getInt("answer_count"), rs.getInt("view_count"), instant(rs, "created_at"),
-                instant(rs, "updated_at"));
+                instant(rs, "updated_at"), rs.getString("status"));
     }
 
     private static Long nullableLong(ResultSet rs, String column) throws SQLException {

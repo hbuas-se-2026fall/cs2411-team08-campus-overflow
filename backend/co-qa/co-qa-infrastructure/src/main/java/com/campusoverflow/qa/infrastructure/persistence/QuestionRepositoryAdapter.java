@@ -3,6 +3,7 @@ package com.campusoverflow.qa.infrastructure.persistence;
 import com.campusoverflow.qa.domain.MarkdownBody;
 import com.campusoverflow.qa.domain.Question;
 import com.campusoverflow.qa.domain.QuestionRepository;
+import com.campusoverflow.qa.domain.QuestionStatus;
 import com.campusoverflow.qa.domain.Tags;
 import com.campusoverflow.qa.domain.Title;
 import java.util.List;
@@ -37,6 +38,7 @@ public class QuestionRepositoryAdapter implements QuestionRepository {
         e.getTags().clear();
         e.getTags().addAll(q.tags().names());
         e.setAcceptedAnswerId(q.acceptedAnswerId());
+        e.setStatus(q.status().name());
         e.setUpdatedAt(q.updatedAt());
         e.setDeletedAt(q.deletedAt());
         QuestionJpaEntity saved = jpa.save(e);
@@ -57,9 +59,10 @@ public class QuestionRepositoryAdapter implements QuestionRepository {
     }
 
     static Question toDomain(QuestionJpaEntity e) {
+        QuestionStatus status = e.getStatus() == null ? QuestionStatus.OPEN : QuestionStatus.valueOf(e.getStatus());
         return Question.reconstitute(e.getId(), e.getAuthorId(), e.getCourseId(), new Title(e.getTitle()),
-                new MarkdownBody(e.getBody()), Tags.of(List.copyOf(e.getTags())), e.getAcceptedAnswerId(), e.getScore(),
-                e.getAnswerCount(), e.getViewCount(), e.getCreatedAt(), e.getUpdatedAt(), e.getDeletedAt(),
-                e.getVersion());
+                new MarkdownBody(e.getBody()), Tags.of(List.copyOf(e.getTags())), e.getAcceptedAnswerId(), status,
+                e.getScore(), e.getAnswerCount(), e.getViewCount(), e.getCreatedAt(), e.getUpdatedAt(),
+                e.getDeletedAt(), e.getVersion());
     }
 }

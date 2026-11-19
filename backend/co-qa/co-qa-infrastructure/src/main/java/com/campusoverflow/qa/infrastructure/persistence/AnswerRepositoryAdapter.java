@@ -2,6 +2,7 @@ package com.campusoverflow.qa.infrastructure.persistence;
 
 import com.campusoverflow.qa.domain.Answer;
 import com.campusoverflow.qa.domain.AnswerRepository;
+import com.campusoverflow.qa.domain.AnswerSource;
 import com.campusoverflow.qa.domain.MarkdownBody;
 import java.util.Optional;
 import org.springframework.stereotype.Repository;
@@ -18,8 +19,8 @@ public class AnswerRepositoryAdapter implements AnswerRepository {
     @Override
     public Optional<Answer> findById(long id) {
         return jpa.findById(id).map(e -> Answer.reconstitute(e.getId(), e.getQuestionId(), e.getAuthorId(),
-                new MarkdownBody(e.getBody()), e.getScore(), e.getEndorsedBy(), e.getCreatedAt(), e.getUpdatedAt(),
-                e.getDeletedAt(), e.getVersion()));
+                new MarkdownBody(e.getBody()), sourceOf(e), e.getScore(), e.getEndorsedBy(), e.getCreatedAt(),
+                e.getUpdatedAt(), e.getDeletedAt(), e.getVersion()));
     }
 
     @Override
@@ -28,6 +29,7 @@ public class AnswerRepositoryAdapter implements AnswerRepository {
                 ? new AnswerJpaEntity(a.questionId(), a.authorId(), a.createdAt())
                 : jpa.findById(a.id()).orElseThrow();
         e.setBody(a.body().value());
+        e.setSource(a.source().name());
         e.setEndorsedBy(a.endorsedBy());
         e.setUpdatedAt(a.updatedAt());
         e.setDeletedAt(a.deletedAt());
@@ -41,5 +43,9 @@ public class AnswerRepositoryAdapter implements AnswerRepository {
     @Override
     public void adjustScore(long answerId, int delta) {
         jpa.adjustScore(answerId, delta);
+    }
+
+    private static AnswerSource sourceOf(AnswerJpaEntity e) {
+        return e.getSource() == null ? AnswerSource.HUMAN : AnswerSource.valueOf(e.getSource());
     }
 }

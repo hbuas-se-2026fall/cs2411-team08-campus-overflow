@@ -26,6 +26,9 @@ public class AnswerJpaEntity {
     @Column(nullable = false, columnDefinition = "MEDIUMTEXT")
     private String body;
 
+    @Column(nullable = false, length = 16)
+    private String source;
+
     @Column(nullable = false)
     private int score;
 
@@ -51,6 +54,7 @@ public class AnswerJpaEntity {
         this.questionId = questionId;
         this.authorId = authorId;
         this.createdAt = createdAt;
+        this.source = "HUMAN";
     }
 
     public Long getId() { return id; }
@@ -58,6 +62,8 @@ public class AnswerJpaEntity {
     public long getAuthorId() { return authorId; }
     public String getBody() { return body; }
     public void setBody(String body) { this.body = body; }
+    public String getSource() { return source; }
+    public void setSource(String source) { this.source = source; }
     public int getScore() { return score; }
     public Long getEndorsedBy() { return endorsedBy; }
     public void setEndorsedBy(Long endorsedBy) { this.endorsedBy = endorsedBy; }
