@@ -27,6 +27,7 @@ export interface Comment { id: number; author: Author; parentId?: number; body: 
 
 export interface Answer {
   id: number; body: string; bodyHtml: string; author: Author; score: number; accepted: boolean;
+  source?: 'HUMAN' | 'AI' | 'AI_ASSISTED'; canDelete?: boolean;
   endorsedBy?: Author; myVote: number; canEdit: boolean; createdAt: string; comments: Comment[];
 }
 

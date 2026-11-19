@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { BrowserRouter, Link, Navigate, Route, Routes, useLocation, useNavigate } from 'react-router-dom';
+import { createBrowserRouter, RouterProvider, Link, Navigate, Route, Routes, useLocation, useNavigate } from 'react-router-dom';
 import { api } from './api';
 import { AuthProvider, useAuth } from './auth';
 import { ErrorState, LoadingState } from './components/AsyncState';
@@ -62,12 +62,13 @@ function NotFoundPage() {
   return <div className="state"><strong>页面不存在</strong><span>地址可能有误，或内容已被移除。</span><Link to="/">返回问题列表</Link></div>;
 }
 
-export function App() {
-  return <BrowserRouter><AuthProvider><CourseProvider>
+function AppLayout() {
+  return <AuthProvider><CourseProvider>
     <Header />
     <main><Routes>
       <Route path="/" element={<QuestionListPage />} />
-      <Route path="/questions/:id" element={<QuestionDetailPage />} />
+      <Route path="/questions/:id" element={<RequireAuth><QuestionDetailPage /></RequireAuth>} />
+      <Route path="/questions/:id/edit" element={<RequireAuth><AskPage /></RequireAuth>} />
       <Route path="/ask" element={<RequireAuth><AskPage /></RequireAuth>} />
       <Route path="/login" element={<LoginPage />} />
       <Route path="/courses" element={<RequireAuth><CoursesPage /></RequireAuth>} />
@@ -77,5 +78,8 @@ export function App() {
       <Route path="/notifications" element={<RequireAuth><NotificationsPage /></RequireAuth>} />
       <Route path="*" element={<NotFoundPage />} />
     </Routes></main>
-  </CourseProvider></AuthProvider></BrowserRouter>;
+  </CourseProvider></AuthProvider>;
 }
+
+const router = createBrowserRouter([{ path: '*', element: <AppLayout /> }]);
+export function App() { return <RouterProvider router={router} />; }
