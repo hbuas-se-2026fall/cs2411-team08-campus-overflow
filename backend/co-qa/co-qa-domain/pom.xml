@@ -11,6 +11,12 @@
     <artifactId>co-qa-domain</artifactId>
     <packaging>jar</packaging>
     <name>Q&amp;A 问答核心 :: domain（纯 Java）</name>
+    <properties>
+        <!-- 领域层行覆盖率门禁（FF-4）。指导书 8.3：S1 起 co-qa-domain ≥ 70%。
+             根 POM 保持 0 到 S3；此处按模块覆盖。
+             注意：B04-1 实现完成前，本地 mvn verify 会在此报 Rule violated，属预期红。 -->
+        <domain.coverage.minimum>0.70</domain.coverage.minimum>
+    </properties>
     <dependencies>
         <dependency>
             <groupId>com.campusoverflow</groupId>
