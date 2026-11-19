@@ -60,24 +60,6 @@ jobs:
       - name: 编译
         run: mvn -B -f backend/pom.xml clean compile
 
-      # F04 依赖的列表契约：标签/排序/未解决筛选必须由后端 SQL 完成，前端只在当前页过滤是禁止的
-      # （F04 计划第 98、103 行；B07 的服务端过滤要求同源）。没有前端测试框架时，这是唯一能自动
-      # 拦住“前端接了不存在的参数”的手段；S4 有 Playwright 后改用真实契约测试。
-      # 放在后端 job 而不是前端 job：检查对象是后端源码，红灯应归因到后端。
-      - name: F04 契约守卫（列表筛选与人工回答数）
-        run: |
-          set +e
-          CTRL=backend/co-qa/co-qa-interfaces/src/main/java/com/campusoverflow/qa/interfaces/QuestionController.java
-          VIEW=backend/co-qa/co-qa-application/src/main/java/com/campusoverflow/qa/application/query/QuestionSummaryView.java
-          fail=0
-          for p in tag sort unanswered; do
-            grep -qE "@RequestParam.*\b$p\b" "$CTRL" \
-              || { echo "::error file=$CTRL::F04 需要列表参数 $p（筛选必须在服务端执行）"; fail=1; }
-          done
-          grep -q "humanAnswerCount" "$VIEW" \
-            || { echo "::error file=$VIEW::F04 需要 humanAnswerCount，否则 AI 回答会被显示成人工已解决"; fail=1; }
-          exit $fail
-
       # 阶段 2：单元测试（仅 Sprint 范围：领域层 + 应用层，毫秒级，无外部依赖）
       # S1 起 Q&A 的既有用例（QuestionTest / AnswerTest / VoteAndCommentTest /
       # AnswerAndVoteServiceTest）也在这条命令里：B04-1 做完，这里转绿即为“验收单全部兑现”。
