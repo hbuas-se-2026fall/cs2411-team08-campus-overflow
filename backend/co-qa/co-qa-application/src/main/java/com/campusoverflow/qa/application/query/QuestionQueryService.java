@@ -52,12 +52,18 @@ public class QuestionQueryService {
         return result;
     }
 
+    /** 旧调用点兼容：回答默认取第一页（每页 20 条）。 */
     public QuestionDetailView detail(long questionId, Actor actorOrNull) {
+        return detail(questionId, actorOrNull, 1, 20);
+    }
+
+    public QuestionDetailView detail(long questionId, Actor actorOrNull, int answerPage, int answerSize) {
         QuestionRow question = readModel.findQuestion(questionId)
                 .orElseThrow(() -> new NotFoundException("QA-2004", "问题不存在"));
         viewCounter.increment(questionId);
 
-        List<AnswerRow> answerRows = readModel.findAnswers(questionId);
+        List<AnswerRow> answerRows = readModel
+                .findAnswers(questionId, new PageRequest(answerPage, answerSize)).items();
         List<CommentRow> commentRows = readModel.findComments(questionId);
         List<Long> answerIds = answerRows.stream().map(AnswerRow::id).toList();
         Map<Long, UserSummary> users = identity.findUsers(collectAuthorIds(question, answerRows, commentRows));
@@ -80,12 +86,14 @@ public class QuestionQueryService {
                         actorOrNull, actorManagesCourse))
                 .toList();
 
+        boolean canReview = actorManagesCourse && question.acceptedAnswerId() != null;
         return new QuestionDetailView(question.id(), question.title(), question.body(),
                 renderer.toSafeHtml(question.body()), question.tags(), course,
                 AuthorView.of(question.authorId(), users.get(question.authorId())),
                 question.score(), question.answerCount(), question.viewCount(), question.acceptedAnswerId(),
                 myVotes.getOrDefault(voteKey(COMMENT_TYPE_QUESTION, questionId), 0),
-                question.createdAt(), question.updatedAt(), permissions, questionComments, answers);
+                question.createdAt(), question.updatedAt(), permissions, questionComments, answers,
+                question.status(), canReview, actorManagesCourse);
     }
 
     public List<TagView> popularTags(int limit) {
@@ -114,7 +122,7 @@ public class QuestionQueryService {
         return new AnswerView(row.id(), row.body(), renderer.toSafeHtml(row.body()),
                 AuthorView.of(row.authorId(), users.get(row.authorId())), row.score(), accepted, endorser,
                 myVotes.getOrDefault(voteKey(COMMENT_TYPE_ANSWER, row.id()), 0), canEdit,
-                row.createdAt(), row.updatedAt(), comments);
+                row.createdAt(), row.updatedAt(), comments, row.source());
     }
 
     private CommentView toCommentView(CommentRow row, Map<Long, UserSummary> users) {

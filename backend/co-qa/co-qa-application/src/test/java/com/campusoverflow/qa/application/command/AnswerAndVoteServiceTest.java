@@ -7,7 +7,9 @@ import com.campusoverflow.qa.api.event.AnswerAcceptedEvent;
 import com.campusoverflow.qa.api.event.AnswerSubmittedEvent;
 import com.campusoverflow.qa.api.event.VoteCastEvent;
 import com.campusoverflow.qa.application.fake.QaTestFixtures.CountingCache;
+import com.campusoverflow.qa.application.fake.QaTestFixtures.InMemoryAcceptanceReviews;
 import com.campusoverflow.qa.application.fake.QaTestFixtures.InMemoryAnswers;
+import com.campusoverflow.qa.application.fake.QaTestFixtures.InMemoryEndorsementLogs;
 import com.campusoverflow.qa.application.fake.QaTestFixtures.InMemoryQuestions;
 import com.campusoverflow.qa.application.fake.QaTestFixtures.InMemoryVotes;
 import com.campusoverflow.qa.application.fake.QaTestFixtures.RecordingAudit;
@@ -38,6 +40,8 @@ class AnswerAndVoteServiceTest {
 
     private final InMemoryQuestions questions = new InMemoryQuestions();
     private final InMemoryAnswers answers = new InMemoryAnswers();
+    private final InMemoryAcceptanceReviews reviews = new InMemoryAcceptanceReviews();
+    private final InMemoryEndorsementLogs endorsementLogs = new InMemoryEndorsementLogs();
     private final InMemoryVotes votes = new InMemoryVotes();
     private final RecordingEvents events = new RecordingEvents();
     private final CountingCache cache = new CountingCache();
@@ -54,7 +58,8 @@ class AnswerAndVoteServiceTest {
 
     @BeforeEach
     void setUp() {
-        answerService = new AnswerCommandService(questions, answers, identity, events, cache, audit, clock);
+        answerService = new AnswerCommandService(questions, answers, reviews, endorsementLogs, identity,
+                events, cache, audit, clock);
         voteService = new VoteService(votes, questions, answers, events, clock);
         Question q = questions.save(Question.post(ming.userId(), 100L, new Title("红黑树插入后为什么必须旋转？"),
                 MarkdownBody.ofQuestion("变色为什么不够？希望有直观解释，最好能给出一个反例。"),

@@ -42,6 +42,9 @@ public class QuestionJpaEntity {
     @Column(name = "accepted_answer_id")
     private Long acceptedAnswerId;
 
+    @Column(nullable = false, length = 16)
+    private String status;
+
     @Column(nullable = false)
     private int score;
 
@@ -70,6 +73,7 @@ public class QuestionJpaEntity {
         this.authorId = authorId;
         this.courseId = courseId;
         this.createdAt = createdAt;
+        this.status = "OPEN";
     }
 
     public Long getId() { return id; }
@@ -82,6 +86,8 @@ public class QuestionJpaEntity {
     public Set<String> getTags() { return tags; }
     public Long getAcceptedAnswerId() { return acceptedAnswerId; }
     public void setAcceptedAnswerId(Long acceptedAnswerId) { this.acceptedAnswerId = acceptedAnswerId; }
+    public String getStatus() { return status; }
+    public void setStatus(String status) { this.status = status; }
     public int getScore() { return score; }
     public int getAnswerCount() { return answerCount; }
     public int getViewCount() { return viewCount; }

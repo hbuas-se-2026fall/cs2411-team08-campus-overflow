@@ -108,6 +108,19 @@ public class QuestionCommandService {
                 question.title().value());
     }
 
+    /** 教师关闭问题：关闭后不可再回答、采纳；不发集成事件（下游无需感知治理状态）。 */
+    @Transactional
+    public void close(Actor actor, long questionId) {
+        Question question = load(questionId);
+        boolean manages = identity.canManageCourse(actor.userId(), question.courseId());
+
+        question.close(actor, manages);
+        questions.save(question);
+        listCache.invalidateAll();
+        audit.record("QUESTION_CLOSED", actor.userId(), "QUESTION", String.valueOf(questionId),
+                question.title().value());
+    }
+
     /** 归档课程只读（FF-5 课程状态约束）：课程必须存在、未归档，且提问者是课程成员。 */
     private void ensureCourseOpenAndJoined(Actor actor, Long courseId) {
         if (courseId == null) {

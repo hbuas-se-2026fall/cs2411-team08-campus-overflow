@@ -12,8 +12,12 @@ import com.campusoverflow.qa.application.query.CommentRow;
 import com.campusoverflow.qa.application.query.QuestionRow;
 import com.campusoverflow.qa.application.query.QuestionSummaryView;
 import com.campusoverflow.qa.application.query.TagView;
+import com.campusoverflow.qa.domain.AcceptanceReview;
+import com.campusoverflow.qa.domain.AcceptanceReviewRepository;
 import com.campusoverflow.qa.domain.Answer;
 import com.campusoverflow.qa.domain.AnswerRepository;
+import com.campusoverflow.qa.domain.EndorsementLog;
+import com.campusoverflow.qa.domain.EndorsementLogRepository;
 import com.campusoverflow.qa.domain.Comment;
 import com.campusoverflow.qa.domain.CommentRepository;
 import com.campusoverflow.qa.domain.Question;
@@ -102,6 +106,38 @@ public final class QaTestFixtures {
         @Override
         public void adjustScore(long answerId, int delta) {
             scoreDeltas.merge(answerId, delta, Integer::sum);
+        }
+    }
+
+    public static class InMemoryAcceptanceReviews implements AcceptanceReviewRepository {
+        public final List<AcceptanceReview> saved = new ArrayList<>();
+        private final AtomicLong sequence = new AtomicLong();
+
+        @Override
+        public void save(AcceptanceReview review) {
+            review.assignId(sequence.incrementAndGet());
+            saved.add(review);
+        }
+
+        @Override
+        public List<AcceptanceReview> findByQuestion(long questionId) {
+            return saved.stream().filter(r -> r.questionId() == questionId).toList();
+        }
+    }
+
+    public static class InMemoryEndorsementLogs implements EndorsementLogRepository {
+        public final List<EndorsementLog> saved = new ArrayList<>();
+        private final AtomicLong sequence = new AtomicLong();
+
+        @Override
+        public void save(EndorsementLog log) {
+            log.assignId(sequence.incrementAndGet());
+            saved.add(log);
+        }
+
+        @Override
+        public List<EndorsementLog> findByAnswer(long answerId) {
+            return saved.stream().filter(l -> l.answerId() == answerId).toList();
         }
     }
 
@@ -344,8 +380,11 @@ public final class QaTestFixtures {
         }
 
         @Override
-        public List<AnswerRow> findAnswers(long questionId) {
-            return answersByQuestion.getOrDefault(questionId, List.of());
+        public PageResult<AnswerRow> findAnswers(long questionId, PageRequest page) {
+            List<AnswerRow> all = answersByQuestion.getOrDefault(questionId, List.of());
+            int from = (int) Math.min(all.size(), page.offset());
+            int to = (int) Math.min(all.size(), (long) page.offset() + page.size());
+            return new PageResult<>(all.subList(from, to), all.size(), page.page(), page.size());
         }
 
         @Override
