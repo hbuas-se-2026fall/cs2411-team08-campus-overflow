@@ -1,98 +1,118 @@
-# CampusOverflow · 学生初始框架（Java / Spring Boot 3）
+# 校园智能问答平台 · CampusOverflow
 
-这是《软件工程》贯穿项目的**起始代码**。整体骨架、构建脚本、部署与 CI 已经就位，
-**四个限界上下文中的 Identity（身份与认证）是完整的参考实现**，其余三个上下文的核心业务留给你们按 Sprint 实现。
+在原 Java/Spring Boot 与 React 框架上继续实现的前后端分离平台，包含课程问答、独立声誉与积分账本、悬赏、教师资料与审核、AI 课程参考、困惑点和周报。原教学框架说明保存在 [docs/原始框架说明.md](docs/原始框架说明.md)。
 
-现在克隆下来直接跑 `mvn test`，你会看到**大量失败的测试**——这不是环境坏了，这是你们这学期的需求说明书。
+最新核心安全实现、自动验证和上线边界见[安全加固实施与验证](docs/安全加固实施与验证.md)。新课程默认私有且禁止模型外发，助教按能力授权，管理员按对象申请限时治理；本轮Java170项、Python43项、Edge21条通过，生产容器/TLS和真实课程效果尚未验收。
 
-## 1. 五分钟跑起来
+## 本机启动（Windows）
 
-```bash
-# 1) 起中间件（需要 Docker）
-docker compose -f deploy/docker-compose.yml up -d mysql redis
+需要 Java 21+、Maven、Node.js、Python 3.12+，以及本机 MySQL 8、Redis。运行配置在 `deploy/.env`；首次部署参考 `.env.example`。该文件已被忽略，不要提交或截图分享。
 
-# 2) 编译并跑测试（第一次会红，这是预期的）
-cd backend && mvn clean test
+MySQL 需要存在 `campus_overflow` 数据库，字符集使用 utf8mb4。应用启动时由 Flyway 自动迁移，不会清空数据库。仅在数据库不存在时自行执行：
 
-# 3) 启动后端（dev profile，不要加 demo，因为演示数据依赖尚未实现的业务代码）
-mvn spring-boot:run -pl co-bootstrap -Dspring-boot.run.profiles=dev
-
-# 4) 启动前端
-cd ../frontend && npm install && npm run dev      # http://localhost:5173
+```sql
+CREATE DATABASE campus_overflow CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci;
 ```
 
-接口文档：http://localhost:8080/swagger-ui.html
+在仓库根目录执行：
 
-## 2. 已经给你们的 vs 需要你们写的
+```powershell
+# 安装和编译（首次运行）
+python -m venv ai-service/.venv
+ai-service/.venv/Scripts/python.exe -m pip install -r ai-service/requirements.lock.txt
+Push-Location frontend
+npm.cmd ci
+npm.cmd run build
+Pop-Location
+Push-Location backend
+mvn "-Dmaven.repo.local=E:/campus-overflow-student/.m2/repository" package
+Pop-Location
 
-| 已提供（读懂它，不要重写） | 需要你们实现 |
+# 启动本项目服务；不会重复启动已经监听的服务
+powershell -ExecutionPolicy Bypass -File deploy/local.ps1 start
+```
+
+前端：<http://127.0.0.1:5173>；后端：<http://localhost:8080>；开发接口文档：<http://localhost:8080/swagger-ui.html>。
+
+`local.ps1` 自动读取 `.env`，在后台启动服务，并把日志写到 `deploy/*-local.log`。Qdrant 使用官方 Windows 发布包，首次下载到忽略的 `deploy/runtime/`；Redis 使用 PATH 中已有的 `redis-server.exe`。MySQL 作为现有系统服务独立运行。脚本的状态与停止操作：
+
+```powershell
+powershell -ExecutionPolicy Bypass -File deploy/local.ps1 status
+powershell -ExecutionPolicy Bypass -File deploy/local.ps1 stop -Service backend
+powershell -ExecutionPolicy Bypass -File deploy/local.ps1 start -Service backend
+```
+
+停止操作仅处理该脚本记录且路径匹配的进程，不关闭其他项目的服务。代码改动后需重新编译并重启相应服务；前端开发服务支持热更新。换目录后请同步修改上述 Maven 缓存路径，也可使用自己的默认 Maven 仓库。
+
+## 演示账号
+
+本地脚本启用 `local,demo`，首次运行会初始化以下账号和一门课程。演示密码统一为 `Campus2026`。
+
+| 身份 | 账号 |
 | --- | --- |
-| 27 个 Maven 模块的骨架与依赖关系 | Q&A、Reputation、Discovery 三个上下文的**领域层**（聚合、值对象、业务规则） |
-| `co-shared-kernel`：领域异常、Actor、事件契约、分页 | 上述三个上下文的**应用层**（用例编排、事务边界、事件发布） |
-| **Identity 上下文完整实现**（注册、登录、课程、角色）——当作范例 | 前端页面的功能增强（见第 6 节） |
-| 所有 `*-api` 发布语言、所有基础设施适配器（JPA / Redis / JDBC）与 REST 控制器 | 你们自己补充的单元测试（领域层覆盖率要求见第 5 节） |
-| 安全链、发件箱中继、全局异常处理、Flyway 迁移、Docker、CI | |
-| **107 个 `TODO` 方法与 38 个随之失败的测试**（领域测试 + 应用层用例测试 + 端到端集成测试） | |
+| 管理员 | admin01 |
+| 教师 | T2001 |
+| 助教 | TA3001 |
+| 学生 | 2023001、2023002、2023003 |
 
-> 为什么基础设施是给好的？因为本课程要考察的是**领域建模与架构约束**，而不是 JPA 映射的熟练度。
-> 你只要把领域方法写对，适配器就能正常工作。
+正式环境应去掉 `demo`，替换密钥、账号和数据库凭据，并配置 HTTPS；不要直接公开本地开发脚本启动的服务。
 
-## 3. 怎么开始：跟着测试走
+## 模型与检索
 
-1. 打开 `docs/学生任务清单.md`，里面列出了全部 107 个 `TODO` 方法及其所在文件。
-2. 从 Q&A 的领域层开始：`co-qa/co-qa-domain/src/test/java/.../QuestionTest.java` 就是规格说明。
-3. 运行单个测试类：`mvn test -pl co-qa/co-qa-domain -Dtest=QuestionTest`
-4. 红 → 绿 → 重构，逐个把测试变绿；再写应用层，让 `AnswerAndVoteServiceTest` 变绿。
-5. 三个上下文都绿之后，跑 `mvn verify`（需要 Docker），端到端集成测试会验证“提问 → 回答 → 采纳 → 声誉 → 搜索 → 通知”整条链路。
+Java 负责授权、持久化任务和业务状态；Python 仅处理已授权证据、解析、召回和生成。模型配置说明见 [ai-service/README.md](ai-service/README.md)。当前本地配置使用提供的 Intern AI 接口和聊天模型，以及硅基流动 `BAAI/bge-m3`；Key 只保存在 `.env`。
 
-**允许你们增加方法、增加类、增加测试**，但**不要修改已有测试的断言**——那相当于改需求；
-如果你确信某条测试与文档矛盾，在 PR 里说明并与教师确认。
+发布资料后才可用于学生参考。新版本发布会替换旧有效版本；停用或修改证据会使旧结果标记过期。AI 发布的正式回答保留 `AI_ASSISTED`，不参与人工答案投票、采纳奖励和认证奖励；教师审核不会改掉来源标记。
 
-## 4. Sprint 与任务对应
+声誉用于认可贡献；积分用于悬赏，二者独立。认证奖励增加积分；采纳奖励增加声誉；教师悬赏从管理员分配的课程额度冻结。撤销操作按原实际奖励冲正，不按后来修改的规则重算；已结算悬赏不会因重复采纳再次发放。
 
-| Sprint | 周次 | 目标 | 对应任务 |
-| --- | --- | --- | --- |
-| S0 | 1–2 | 跑通环境、读懂 Identity 参考实现与架构文档 | 无编码任务；提交环境验证截图与架构理解笔记 |
-| S1 | 3–6 | 身份与课程：读懂并**扩展** Identity（如选课审批、个人资料） | 在 Identity 上下文中自行设计增量需求 |
-| S2 | 7–10 | 问答核心：Q&A 上下文全部 TODO | `docs/学生任务清单.md` 中标记 **S2** 的 36 个方法 |
-| S3 | 11–13 | 声誉与发现：Reputation + Discovery 上下文全部 TODO | 标记 **S3** 的 71 个方法 |
-| S4 | 14–15 | 打磨：性能、可观测性、前端体验、演示准备 | 第 6 节的增强任务 + 压测与指标 |
+## 验证
 
-## 5. 验收门槛（对应课程考核）
+```powershell
+Push-Location backend
+mvn "-Dmaven.repo.local=E:/campus-overflow-student/.m2/repository" test
+Pop-Location
+ai-service/.venv/Scripts/python.exe -m unittest discover -s ai-service -v
+Push-Location frontend
+npm.cmd run typecheck
+npm.cmd run build
+npx.cmd playwright test
+Pop-Location
 
-| 项目 | 要求 | 如何自检 |
-| --- | --- | --- |
-| 单元测试 | 全部通过 | `mvn test` |
-| 领域层覆盖率 | ≥ 70%（把 `backend/pom.xml` 中的 `domain.coverage.minimum` 从 `0` 改成 `0.70` 后仍能通过） | `mvn verify` |
-| 架构约束 | ArchUnit 全部通过（领域层零框架依赖、跨上下文只经 api、无环、实体表名前缀） | `mvn test -pl co-bootstrap -Dtest=ArchitectureTest` |
-| 集成测试 | 端到端链路通过 | `mvn verify`（需要 Docker） |
-| 前端 | 类型检查与构建通过 | `cd frontend && npm run typecheck && npm run build` |
-| 流水线 | GitHub Actions 全绿 | 推送后看 Actions 页 |
+# 依赖已启动的真实服务与 demo 账号，创建独立测试课程和账号
+ai-service/.venv/Scripts/python.exe scripts/smoke.py
+# 本地后台提醒/任务生命周期，不调用供应商
+ai-service/.venv/Scripts/python.exe scripts/lifecycle_smoke.py
+# 补齐功能、真实资料索引（少量embedding，无聊天生成）
+ai-service/.venv/Scripts/python.exe scripts/completion_smoke.py
+# 使用上一命令创建的独立样本，演练租约恢复与事件重放
+ai-service/.venv/Scripts/python.exe scripts/recovery_smoke.py
+# 举报额度、规则版本和资料发布的并发竞争
+ai-service/.venv/Scripts/python.exe scripts/concurrency_smoke.py
+# 独立新数据库与临时Redis上的完整迁移和业务回归
+ai-service/.venv/Scripts/python.exe scripts/clean_deploy_smoke.py
+# 语义去重、答案排序、缺口统计的真实联调（少量 embedding，不调用聊天模型）
+ai-service/.venv/Scripts/python.exe scripts/semantic_smoke.py
+# 仅在要验证真实归纳时，加 --with-summary，允许一次教师触发的聊天调用
+# 调用实际模型和 embedding，可能产生供应商用量
+ai-service/.venv/Scripts/python.exe scripts/ai_smoke.py
+```
 
-**不要为了让测试通过而删测试或放宽断言**——CI 的历史记录会保留每一次改动，这属于学术诚信范畴。
+浏览器测试在 Windows 默认使用本机 Edge；Linux CI 应先执行 `npx playwright install --with-deps chromium`。`mvn verify` 中的 Testcontainers 集成测试需要 Docker，本机没有 Docker 时可用上述 HTTP 回归验证真实 MySQL/Redis 链路。
 
-## 6. 前端增强任务（S4 建议）
+## 部署与文档
 
-前端已提供可运行的骨架（登录/注册、问题列表与搜索、详情页投票与采纳、提问、排行榜、通知）。建议自行完成：
+本地 Docker 方式使用独立容器环境，和本机服务二选一，避免端口冲突：
 
-- 分页与无限滚动、加载骨架屏与错误重试；
-- Markdown 实时预览与代码高亮；
-- 悬赏发起对话框（当前是 `prompt()` 占位）、悬赏倒计时展示；
-- 通知红点的实时刷新（当前是 30 秒轮询，可改 SSE）；
-- 移动端适配与可访问性（键盘操作、对比度）。
+```powershell
+docker compose --env-file deploy/.env -f deploy/docker-compose.local.yml up -d --build
+```
 
-## 7. 你必须先读的三份材料
+- [生产安全部署说明](docs/生产安全部署说明.md)（生产使用独立.env.production及docker-compose.yml）
+- [实现与验证记录](docs/开发进度.md)
+- [全量完成度核查与剩余任务](docs/全量完成度核查.md)
+- [三项智能能力的实现与验收](docs/智能能力实现与验收.md)
+- [前端详细开发计划](docs/前端详细开发计划.md) / [后端详细开发计划](docs/后端详细开发计划.md)
+- [运行维护与备份](docs/运行维护.md)
+- [架构决策](docs/adr/)
 
-1. `docs/adr/`：8 条架构决策记录——**为什么**这样设计比代码本身更重要；
-2. 《CampusOverflow 软件架构设计文档（arc42）》：第 5 章构建块视图、第 6 章运行时视图、第 10 章质量场景；
-3. `docs/错误码.md`：错误码分段与 HTTP 状态映射，实现领域异常时必须遵守。
-
-## 8. 常见坑
-
-| 现象 | 原因 |
-| --- | --- |
-| `UnsupportedOperationException: TODO(S2)...` | 正常，说明这个方法还没实现 |
-| 声誉不变化 | 声誉是异步结算的：事件先落 `outbox_event`，由中继投递；检查 `last_error` 字段 |
-| 中文搜索没结果 | 必须用 compose 里的 MySQL（已配置 `ngram_token_size=2`），自建库请对照参数 |
-| 事件重复导致加分两次 | 消费端必须幂等：账本唯一键 `(event_id, user_id, reason)` 或 `processed_event` 表 |
-| 提交后 CI 红 | 先本地跑 `mvn verify`，再推送；不要把红的分支合并到 `main` |
+实现和限制以开发进度记录为准。课程语义聚类、严格重复候选、可解释规则质量排序和教师触发的困惑点归纳已经接入；向量特征缓存可复用。规则和阈值尚需真实标注评估，扫描 PDF OCR、大规模离线索引和学习排序模型属于后续增强。
