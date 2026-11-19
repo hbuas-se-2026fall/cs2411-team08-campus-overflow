@@ -22,7 +22,7 @@ function cookie(name: string): string | undefined {
   return document.cookie.split('; ').find((c) => c.startsWith(`${name}=`))?.split('=')[1];
 }
 
-async function request<T>(method: string, path: string, body?: unknown): Promise<T> {
+async function request<T>(method: string, path: string, body?: unknown, signal?: AbortSignal): Promise<T> {
   const headers: Record<string, string> = {};
   if (body !== undefined) headers['Content-Type'] = 'application/json';
   if (method !== 'GET') {
@@ -35,7 +35,10 @@ async function request<T>(method: string, path: string, body?: unknown): Promise
     if (token) headers['X-XSRF-TOKEN'] = decodeURIComponent(token);
   }
   const controller = new AbortController();
-  const timeout = window.setTimeout(() => controller.abort(), 15_000);
+  const abort = () => controller.abort();
+  signal?.addEventListener('abort', abort, { once: true });
+  const timeout = window.setTimeout(abort, 15_000);
+  if (signal?.aborted) abort();
   let res: Response;
   try {
     res = await fetch(`/api${path}`, {
@@ -43,10 +46,12 @@ async function request<T>(method: string, path: string, body?: unknown): Promise
       body: body === undefined ? undefined : JSON.stringify(body),
     });
   } catch (error) {
-    const timedOut = error instanceof DOMException && error.name === 'AbortError';
+    if (signal?.aborted) throw error;
+    const timedOut = controller.signal.aborted;
     throw new NetworkError(timedOut ? '请求超时，请确认操作结果后再重试' : '网络连接失败，请检查网络后重试', timedOut);
   } finally {
     window.clearTimeout(timeout);
+    signal?.removeEventListener('abort', abort);
   }
   if (res.status === 204) return undefined as T;
   const text = await res.text();
@@ -85,7 +90,7 @@ function statusMessage(status: number) {
   return '请求失败，请稍后重试';
 }
 
-const get = <T>(path: string) => request<T>('GET', path);
+const get = <T>(path: string, signal?: AbortSignal) => request<T>('GET', path, undefined, signal);
 
 export const api = {
   csrf: () => get<{ token: string }>('/v1/auth/csrf'),
@@ -103,14 +108,20 @@ export const api = {
   assignCourseRole: (courseId: number, userId: number, role: CourseRole) =>
     request<void>('PUT', `/v1/courses/${courseId}/members/${userId}`, { role }),
 
-  questions: (page = 1, courseId?: number) =>
-    get<Page<QuestionSummary>>(`/v1/questions?page=${page}${courseId ? `&courseId=${courseId}` : ''}`),
-  question: (id: number) => get<QuestionDetail>(`/v1/questions/${id}`),
+  questions: (page = 1, courseId?: number, size = 20, signal?: AbortSignal) => {
+    const params = new URLSearchParams({ page: String(page), size: String(size) });
+    if (courseId !== undefined) params.set('courseId', String(courseId));
+    return get<Page<QuestionSummary>>(`/v1/questions?${params}`, signal);
+  },
+  question: (id: number, signal?: AbortSignal) => get<QuestionDetail>(`/v1/questions/${id}`, signal),
   ask: (body: { courseId?: number; title: string; body: string; tags: string[] }) =>
     request<{ id: number }>('POST', '/v1/questions', body),
+  updateQuestion: (id: number, body: { title: string; body: string; tags: string[] }) => request<void>('PUT', `/v1/questions/${id}`, body),
   deleteQuestion: (id: number) => request<void>('DELETE', `/v1/questions/${id}`),
   answer: (questionId: number, body: string) =>
     request<{ id: number }>('POST', `/v1/questions/${questionId}/answers`, { body }),
+  updateAnswer: (answerId: number, body: string) => request<void>('PUT', `/v1/answers/${answerId}`, { body }),
+  deleteAnswer: (answerId: number) => request<void>('DELETE', `/v1/answers/${answerId}`),
   accept: (questionId: number, answerId: number) =>
     request<void>('PUT', `/v1/questions/${questionId}/accepted-answer`, { answerId }),
   endorse: (answerId: number) => request<void>('POST', `/v1/answers/${answerId}/endorsement`, {}),
@@ -119,12 +130,14 @@ export const api = {
   comment: (targetType: 'QUESTION' | 'ANSWER', targetId: number, body: string, parentId?: number) =>
     request<{ id: number }>('POST', '/v1/comments', { targetType, targetId, body, parentId }),
 
-  search: (q: string, params: { tag?: string; sort?: string; unanswered?: boolean; page?: number } = {}) => {
-    const search = new URLSearchParams({ q, page: String(params.page ?? 1) });
+  search: (q: string, params: { courseId?: number; tag?: string; sort?: string; unanswered?: boolean; bounty?: boolean; page?: number; size?: number; signal?: AbortSignal } = {}) => {
+    const search = new URLSearchParams({ q, page: String(params.page ?? 1), size: String(params.size ?? 20) });
+    if (params.courseId !== undefined) search.set('courseId', String(params.courseId));
     if (params.tag) search.set('tag', params.tag);
     if (params.sort) search.set('sort', params.sort);
     if (params.unanswered) search.set('unanswered', 'true');
-    return get<Page<SearchResult>>(`/v1/search/questions?${search}`);
+    if (params.bounty) search.set('bounty', 'true');
+    return get<Page<SearchResult>>(`/v1/search/questions?${search}`, params.signal);
   },
   related: (questionId: number) =>
     get<{ id: number; title: string; answerCount: number; accepted: boolean }[]>(`/v1/questions/${questionId}/related`),
