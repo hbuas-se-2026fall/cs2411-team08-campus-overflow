@@ -90,23 +90,54 @@ public class ReputationPersistenceAdapter
     @Override
     public void append(LedgerEntry entry) {
         ledger.save(new LedgerJpaEntity(entry.userId(), entry.eventId(), entry.reason().name(), entry.delta(),
-                entry.refType(), entry.refId(), entry.createdAt()));
+                entry.refType(), entry.refId(), entry.createdAt(), entry.reversesEventId()));
     }
 
     @Override
     public PageResult<LedgerEntry> findByUser(long userId, PageRequest page) {
         Page<LedgerJpaEntity> p = ledger.findByUserIdOrderByIdDesc(userId,
                 org.springframework.data.domain.PageRequest.of(page.page() - 1, page.size()));
-        return new PageResult<>(p.getContent().stream()
-                .map(e -> new LedgerEntry(e.getId(), e.getUserId(), e.getEventId(),
-                        ReputationReason.valueOf(e.getReason()), e.getDelta(), e.getRefType(), e.getRefId(),
-                        e.getCreatedAt()))
-                .toList(), p.getTotalElements(), page.page(), page.size());
+        return new PageResult<>(p.getContent().stream().map(ReputationPersistenceAdapter::toDomain).toList(),
+                p.getTotalElements(), page.page(), page.size());
+    }
+
+    @Override
+    public PageResult<LedgerEntry> findReputationByUser(long userId, PageRequest page) {
+        return findByCurrency(userId, ReputationReason.Currency.REPUTATION, page);
+    }
+
+    @Override
+    public PageResult<LedgerEntry> findPointsByUser(long userId, PageRequest page) {
+        return findByCurrency(userId, ReputationReason.Currency.POINTS, page);
+    }
+
+    private PageResult<LedgerEntry> findByCurrency(long userId, ReputationReason.Currency currency, PageRequest page) {
+        Page<LedgerJpaEntity> p = ledger.findByUserIdAndReasonInOrderByIdDesc(userId,
+                ReputationReason.namesOf(currency),
+                org.springframework.data.domain.PageRequest.of(page.page() - 1, page.size()));
+        return new PageResult<>(p.getContent().stream().map(ReputationPersistenceAdapter::toDomain).toList(),
+                p.getTotalElements(), page.page(), page.size());
+    }
+
+    @Override
+    public Optional<LedgerEntry> findReversible(long userId, ReputationReason reason, String refType, long refId) {
+        return ledger.findLatestReversible(userId, reason.name(), refType, refId)
+                .map(ReputationPersistenceAdapter::toDomain);
+    }
+
+    @Override
+    public boolean existsReversalOf(String originalEventId, long userId, ReputationReason reason) {
+        return ledger.existsByReversesEventIdAndUserIdAndReason(originalEventId, userId, reason.name());
+    }
+
+    private static LedgerEntry toDomain(LedgerJpaEntity e) {
+        return new LedgerEntry(e.getId(), e.getUserId(), e.getEventId(), ReputationReason.valueOf(e.getReason()),
+                e.getDelta(), e.getRefType(), e.getRefId(), e.getCreatedAt(), e.getReversesEventId());
     }
 
     @Override
     public long countByUserAndReason(long userId, ReputationReason reason) {
-        return ledger.countByUserIdAndReason(userId, reason.name());
+        return ledger.countPositiveByUserIdAndReason(userId, reason.name());
     }
 
     @Override
@@ -119,7 +150,8 @@ public class ReputationPersistenceAdapter
     @Override
     public Map<Long, Long> sumByUser() {
         Map<Long, Long> result = new HashMap<>();
-        for (Object[] row : ledger.sumGroupByUser()) {
+        for (Object[] row : ledger.sumGroupByUser(
+                ReputationReason.namesOf(ReputationReason.Currency.REPUTATION))) {
             result.put(((Number) row[0]).longValue(), ((Number) row[1]).longValue());
         }
         return result;

@@ -38,11 +38,20 @@ public class LedgerJpaEntity {
     @Column(name = "created_at", nullable = false)
     private Instant createdAt;
 
+    /** 冲正流水指向的原流水 event_id；普通流水为 null。 */
+    @Column(name = "reverses_event_id", length = 64)
+    private String reversesEventId;
+
     protected LedgerJpaEntity() {
     }
 
     public LedgerJpaEntity(long userId, String eventId, String reason, int delta, String refType, long refId,
                            Instant createdAt) {
+        this(userId, eventId, reason, delta, refType, refId, createdAt, null);
+    }
+
+    public LedgerJpaEntity(long userId, String eventId, String reason, int delta, String refType, long refId,
+                           Instant createdAt, String reversesEventId) {
         this.userId = userId;
         this.eventId = eventId;
         this.reason = reason;
@@ -50,6 +59,7 @@ public class LedgerJpaEntity {
         this.refType = refType;
         this.refId = refId;
         this.createdAt = createdAt;
+        this.reversesEventId = reversesEventId;
     }
 
     public Long getId() { return id; }
@@ -60,4 +70,5 @@ public class LedgerJpaEntity {
     public String getRefType() { return refType; }
     public long getRefId() { return refId; }
     public Instant getCreatedAt() { return createdAt; }
+    public String getReversesEventId() { return reversesEventId; }
 }

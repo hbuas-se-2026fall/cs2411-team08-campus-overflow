@@ -7,7 +7,9 @@ import com.campusoverflow.shared.security.Role;
  * <ul>
  *   <li>回答被采纳 +15（自问自答被采纳不加分）；</li>
  *   <li>被赞 +10，被踩 −2；改投、撤销按“新效果 − 旧效果”计算增量；</li>
- *   <li>反作弊：每人每个自然日（UTC）因被投票获得的正向声誉最多 200。</li>
+ *   <li>反作弊：每人每个自然日（UTC）因被投票获得的正向声誉最多 200；</li>
+ *   <li>教师认证 +5 积分（与声誉分账）；</li>
+ *   <li>对外展示的声誉下限为 0，账本保留真实负值。</li>
  * </ul>
  */
 public final class ReputationRulebook {
@@ -16,6 +18,7 @@ public final class ReputationRulebook {
     public static final int UPVOTE = 10;
     public static final int DOWNVOTE = -2;
     public static final int DAILY_VOTE_CAP = 200;
+    public static final int ENDORSEMENT_POINTS = 5;
 
     private ReputationRulebook() {
     }
@@ -52,5 +55,15 @@ public final class ReputationRulebook {
             case TEACHER, ADMIN -> 1000;
             case STUDENT, TA -> 0;
         };
+    }
+
+    /** 冲正：只追加一条相反流水，不修改或删除原流水。 */
+    public static int reversalDelta(int originalDelta) {
+        return -originalDelta;
+    }
+
+    /** 展示下限：负声誉对外显示 0，账本仍保留真实负值（防套利由展示层处理）。 */
+    public static int displayReputation(int reputation) {
+        return Math.max(0, reputation);
     }
 }

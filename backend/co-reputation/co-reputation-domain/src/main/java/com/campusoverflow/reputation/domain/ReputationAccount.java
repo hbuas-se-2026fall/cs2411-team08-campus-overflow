@@ -3,8 +3,9 @@ package com.campusoverflow.reputation.domain;
 import com.campusoverflow.shared.domain.BusinessRuleException;
 
 /**
- * 声誉账户。不变量：reputation 恒等于该用户所有账本流水 delta 之和（由对账任务 FF-8 验证）。
- * 悬赏积分 = 可用 + 冻结，冻结部分在悬赏结算或到期时释放。
+ * 声誉账户。不变量：reputation 恒等于该用户所有 REPUTATION 币种账本流水 delta 之和（由对账任务 FF-8 验证）。
+ * 悬赏积分 = 可用 + 冻结，冻结部分在悬赏结算或到期时释放；积分撤销后允许为负（待追回），
+ * 此时 freezePoints 会自然拒绝新的支出。
  */
 public class ReputationAccount {
 
@@ -34,6 +35,21 @@ public class ReputationAccount {
     /** 只允许通过账本流水改变声誉（由应用服务保证先写流水）。 */
     public void applyReputation(int delta) {
         reputation += delta;
+    }
+
+    /** 只允许通过账本流水改变积分；允许扣成负数，代表撤销后待追回的金额。 */
+    public void applyPoints(int delta) {
+        availablePoints += delta;
+    }
+
+    /** 对外展示的声誉下限为 0，账本保留真实负值。 */
+    public int displayReputation() {
+        return ReputationRulebook.displayReputation(reputation);
+    }
+
+    /** 撤销后积分被扣成负数时，待追回的金额；余额充足时为 0。 */
+    public int pendingRecovery() {
+        return Math.max(0, -availablePoints);
     }
 
     public void freezePoints(int points) {

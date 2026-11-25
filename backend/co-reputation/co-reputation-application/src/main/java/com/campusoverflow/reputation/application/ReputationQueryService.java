@@ -36,7 +36,8 @@ public class ReputationQueryService {
         UserSummary user = identity.findUser(userId)
                 .orElseThrow(() -> new NotFoundException("REP-3001", "用户不存在"));
         ReputationAccount account = accounts.findByUserId(userId).orElse(null);
-        int reputation = account == null ? 0 : account.reputation();
+        // 展示下限 0：负声誉对外显示 0，账本与对账仍保留真实负值
+        int reputation = account == null ? 0 : account.displayReputation();
         boolean self = viewerOrNull != null && viewerOrNull.is(userId);
         Integer available = self && account != null ? account.availablePoints() : null;
         Integer frozen = self && account != null ? account.frozenPoints() : null;
@@ -52,7 +53,7 @@ public class ReputationQueryService {
         if (!viewer.is(userId) && !viewer.isAdmin()) {
             throw new ForbiddenException("REP-3002", "只能查看本人的声誉流水");
         }
-        return this.ledger.findByUser(userId, page).map(e -> new LedgerEntryView(e.id(), e.reason().name(),
-                e.reason().label(), e.delta(), e.refType(), e.refId(), e.createdAt()));
+        return this.ledger.findReputationByUser(userId, page).map(e -> new LedgerEntryView(e.id(), e.reason().name(),
+                e.reason().label(), e.delta(), e.refType(), e.refId(), e.createdAt(), e.reversesEventId()));
     }
 }

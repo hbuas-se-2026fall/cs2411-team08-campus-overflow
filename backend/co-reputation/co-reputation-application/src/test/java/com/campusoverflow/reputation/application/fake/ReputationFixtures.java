@@ -132,7 +132,7 @@ public final class ReputationFixtures {
         @Override
         public void append(LedgerEntry entry) {
             entries.add(new LedgerEntry((long) (entries.size() + 1), entry.userId(), entry.eventId(), entry.reason(),
-                    entry.delta(), entry.refType(), entry.refId(), entry.createdAt()));
+                    entry.delta(), entry.refType(), entry.refId(), entry.createdAt(), entry.reversesEventId()));
         }
 
         @Override
@@ -142,8 +142,38 @@ public final class ReputationFixtures {
         }
 
         @Override
+        public PageResult<LedgerEntry> findReputationByUser(long userId, PageRequest page) {
+            List<LedgerEntry> mine = entries.stream()
+                    .filter(e -> e.userId() == userId && !e.reason().isPoints()).toList();
+            return new PageResult<>(mine, mine.size(), page.page(), page.size());
+        }
+
+        @Override
+        public PageResult<LedgerEntry> findPointsByUser(long userId, PageRequest page) {
+            List<LedgerEntry> mine = entries.stream()
+                    .filter(e -> e.userId() == userId && e.reason().isPoints()).toList();
+            return new PageResult<>(mine, mine.size(), page.page(), page.size());
+        }
+
+        @Override
+        public Optional<LedgerEntry> findReversible(long userId, ReputationReason reason, String refType, long refId) {
+            return entries.stream()
+                    .filter(e -> e.userId() == userId && e.reason() == reason
+                            && Objects.equals(e.refType(), refType) && e.refId() == refId
+                            && e.delta() > 0 && !e.isReversal())
+                    .reduce((older, newer) -> newer);
+        }
+
+        @Override
+        public boolean existsReversalOf(String originalEventId, long userId, ReputationReason reason) {
+            return entries.stream().anyMatch(e -> originalEventId.equals(e.reversesEventId())
+                    && e.userId() == userId && e.reason() == reason);
+        }
+
+        @Override
         public long countByUserAndReason(long userId, ReputationReason reason) {
-            return entries.stream().filter(e -> e.userId() == userId && e.reason() == reason).count();
+            return entries.stream().filter(e -> e.userId() == userId && e.reason() == reason
+                    && e.delta() > 0 && !e.isReversal()).count();
         }
 
         @Override
@@ -157,7 +187,8 @@ public final class ReputationFixtures {
         @Override
         public Map<Long, Long> sumByUser() {
             Map<Long, Long> result = new HashMap<>();
-            entries.forEach(e -> result.merge(e.userId(), (long) e.delta(), Long::sum));
+            entries.stream().filter(e -> !e.reason().isPoints())
+                    .forEach(e -> result.merge(e.userId(), (long) e.delta(), Long::sum));
             return result;
         }
     }

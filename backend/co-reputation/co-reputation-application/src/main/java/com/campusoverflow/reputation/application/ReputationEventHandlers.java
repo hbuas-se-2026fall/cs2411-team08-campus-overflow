@@ -3,7 +3,9 @@ package com.campusoverflow.reputation.application;
 import com.campusoverflow.identity.api.event.UserRegisteredEvent;
 import com.campusoverflow.qa.api.event.AnswerAcceptedEvent;
 import com.campusoverflow.qa.api.event.AnswerEndorsedEvent;
+import com.campusoverflow.qa.api.event.AnswerEndorsementRevokedEvent;
 import com.campusoverflow.qa.api.event.AnswerSubmittedEvent;
+import com.campusoverflow.qa.api.event.AnswerUnacceptedEvent;
 import com.campusoverflow.qa.api.event.VoteCastEvent;
 import com.campusoverflow.reputation.domain.BadgePolicy;
 import com.campusoverflow.reputation.domain.BadgeType;
@@ -93,9 +95,28 @@ public class ReputationEventHandlers {
         badges.grant(e.answerAuthorId(), BadgeType.FIRST_ANSWER);
     }
 
+    /** 教师认证：历史成就徽章 + 5 积分（积分走 POINTS 币种，不影响声誉）。 */
     @EventListener
     @Transactional
     public void on(AnswerEndorsedEvent e) {
         badges.grant(e.answerAuthorId(), BadgeType.TEACHER_ENDORSED);
+        ledgerService.record(e.answerAuthorId(), e.eventId(), ReputationReason.ANSWER_ENDORSED,
+                ReputationRulebook.ENDORSEMENT_POINTS, "ANSWER", e.answerId());
+    }
+
+    /** 撤销采纳：冲正 +15 声誉，只追加相反流水；徽章不撤回（D4）。 */
+    @EventListener
+    @Transactional
+    public void on(AnswerUnacceptedEvent e) {
+        ledgerService.reverse(e.answerAuthorId(), e.eventId(), ReputationReason.ANSWER_ACCEPTED,
+                "ANSWER", e.answerId());
+    }
+
+    /** 撤销认证：冲正 +5 积分；积分已花费时余额可为负，由 B06 处理待追回。 */
+    @EventListener
+    @Transactional
+    public void on(AnswerEndorsementRevokedEvent e) {
+        ledgerService.reverse(e.answerAuthorId(), e.eventId(), ReputationReason.ANSWER_ENDORSED,
+                "ANSWER", e.answerId());
     }
 }
