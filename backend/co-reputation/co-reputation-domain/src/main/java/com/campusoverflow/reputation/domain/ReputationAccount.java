@@ -7,7 +7,7 @@ import com.campusoverflow.shared.domain.BusinessRuleException;
  * 悬赏积分 = 可用 + 冻结，冻结部分在悬赏结算或到期时释放；积分撤销后允许为负（待追回），
  * 此时 freezePoints 会自然拒绝新的支出。
  */
-public class ReputationAccount {
+public class ReputationAccount implements PointsWallet {
 
     private final long userId;
     private int reputation;
@@ -52,6 +52,7 @@ public class ReputationAccount {
         return Math.max(0, -availablePoints);
     }
 
+    @Override
     public void freezePoints(int points) {
         requirePositive(points);
         if (points > availablePoints) {
@@ -62,6 +63,7 @@ public class ReputationAccount {
     }
 
     /** 悬赏成功发放：冻结积分转出给获奖者（以声誉形式），发起人账户中消失。 */
+    @Override
     public void spendFrozen(int points) {
         requirePositive(points);
         ensureFrozen(points);
@@ -69,6 +71,7 @@ public class ReputationAccount {
     }
 
     /** 悬赏到期：冻结积分退回可用。 */
+    @Override
     public void refundFrozen(int points) {
         requirePositive(points);
         ensureFrozen(points);
@@ -90,7 +93,7 @@ public class ReputationAccount {
 
     public long userId() { return userId; }
     public int reputation() { return reputation; }
-    public int availablePoints() { return availablePoints; }
-    public int frozenPoints() { return frozenPoints; }
+    @Override public int availablePoints() { return availablePoints; }
+    @Override public int frozenPoints() { return frozenPoints; }
     public long version() { return version; }
 }

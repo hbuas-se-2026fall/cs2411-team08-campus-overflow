@@ -18,6 +18,7 @@ import java.time.Clock;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneOffset;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.event.EventListener;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
@@ -35,16 +36,26 @@ public class ReputationEventHandlers {
     private final BadgeService badges;
     private final BountyService bounties;
     private final Clock clock;
+    private final PointsRecoveryRecorder recovery;
 
+    @Autowired
     public ReputationEventHandlers(ReputationAccountRepository accounts, LedgerRepository ledger,
                                    ReputationLedgerService ledgerService, BadgeService badges,
-                                   BountyService bounties, Clock clock) {
+                                   BountyService bounties, Clock clock, PointsRecoveryRecorder recovery) {
         this.accounts = accounts;
         this.ledger = ledger;
         this.ledgerService = ledgerService;
         this.badges = badges;
         this.bounties = bounties;
         this.clock = clock;
+        this.recovery = recovery;
+    }
+
+    /** 兼容既有单元测试：不启用待追回记录。 */
+    public ReputationEventHandlers(ReputationAccountRepository accounts, LedgerRepository ledger,
+                                   ReputationLedgerService ledgerService, BadgeService badges,
+                                   BountyService bounties, Clock clock) {
+        this(accounts, ledger, ledgerService, badges, bounties, clock, (userId, amount, eventId) -> { });
     }
 
     @EventListener
@@ -112,11 +123,17 @@ public class ReputationEventHandlers {
                 "ANSWER", e.answerId());
     }
 
-    /** 撤销认证：冲正 +5 积分；积分已花费时余额可为负，由 B06 处理待追回。 */
+    /** 撤销认证：冲正 +5 积分；积分已花费产生负余额时登记待追回（B06 正式建表）。 */
     @EventListener
     @Transactional
     public void on(AnswerEndorsementRevokedEvent e) {
-        ledgerService.reverse(e.answerAuthorId(), e.eventId(), ReputationReason.ANSWER_ENDORSED,
-                "ANSWER", e.answerId());
+        boolean reversed = ledgerService.reverse(e.answerAuthorId(), e.eventId(),
+                ReputationReason.ANSWER_ENDORSED, "ANSWER", e.answerId());
+        if (reversed) {
+            accounts.findByUserId(e.answerAuthorId())
+                    .filter(account -> account.pendingRecovery() > 0)
+                    .ifPresent(account -> recovery.ensurePending(account.userId(), account.pendingRecovery(),
+                            e.eventId()));
+        }
     }
 }

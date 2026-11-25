@@ -26,6 +26,21 @@ public class BountyJpaEntity {
     @Column(nullable = false)
     private int points;
 
+    @Column(name = "source_type", nullable = false, length = 16)
+    private String sourceType = "PERSONAL";
+
+    @Column(name = "source_id", nullable = false)
+    private long sourceId;
+
+    @Column(name = "command_key", length = 128)
+    private String commandKey;
+
+    @Column(nullable = false)
+    private boolean disputed;
+
+    @Column(name = "open_slot")
+    private Long openSlot;
+
     @Column(nullable = false, length = 16)
     private String status;
 
@@ -62,6 +77,16 @@ public class BountyJpaEntity {
     public long getQuestionId() { return questionId; }
     public long getSponsorId() { return sponsorId; }
     public int getPoints() { return points; }
+    public String getSourceType() { return sourceType; }
+    public void setSourceType(String sourceType) { this.sourceType = sourceType; }
+    public long getSourceId() { return sourceId; }
+    public void setSourceId(long sourceId) { this.sourceId = sourceId; }
+    public String getCommandKey() { return commandKey; }
+    public void setCommandKey(String commandKey) { this.commandKey = commandKey; }
+    public boolean isDisputed() { return disputed; }
+    public void setDisputed(boolean disputed) { this.disputed = disputed; }
+    public Long getOpenSlot() { return openSlot; }
+    public void setOpenSlot(Long openSlot) { this.openSlot = openSlot; }
     public String getStatus() { return status; }
     public void setStatus(String status) { this.status = status; }
     public Instant getCreatedAt() { return createdAt; }

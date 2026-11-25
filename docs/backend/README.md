@@ -21,9 +21,10 @@
 | [B04-1-问答核心.md](B04-1-问答核心.md) | B04-1 | 2026-11-12 | 问答核心：清零 co-qa 全部 30 处 S2 TODO | `c79fbc1` |
 | [B04-2-问题状态机与采纳复核.md](B04-2-问题状态机与采纳复核.md) | B04-2 | 2026-11-19 | 问题状态机、撤销采纳、教师复核、认证历史、回答来源与分页 | `4012abe` |
 | [B05-声誉积分与冲正.md](B05-声誉积分与冲正.md) | B05-1 | 2026-11-23 | 清零 S3 全部 71 处 TODO：声誉账本、悬赏结算、徽章、搜索投影、通知基线 | `f7e8c48` |
-| [B05-2-撤销冲正与积分分账.md](B05-2-撤销冲正与积分分账.md) | B05-2 | 2026-11-25 | 撤销冲正闭环、`reverses_event_id`、声誉/积分分账、`/users/me/points` 双端点、展示下限 0 | 待提交 |
+| [B05-2-撤销冲正与积分分账.md](B05-2-撤销冲正与积分分账.md) | B05-2 | 2026-11-25 | 撤销冲正闭环、`reverses_event_id`、声誉/积分分账、`/users/me/points` 双端点、展示下限 0 | `69643a8` |
+| [B06-悬赏与课程预算.md](B06-悬赏与课程预算.md) | B06 | 2026-11-25 | 悬赏资金来源分账、幂等与并发终态、课程预算双端点、问题删除退款、待追回复核 | 待提交 |
 
-> B01–B03 三批合并在同一个提交 `fa278b5`（分支 `feature/user-login`）中；B04-1 单独提交于 `feat/backend-b04-qa-core`（`c79fbc1`）；B04-2 同分支后续提交 `4012abe`。B05-1 提交于 `f7e8c48`（分支 `feat/backend-b05-reputation-ledger`）；B05-2 同分支继续开发，完成时仍在工作区、尚未提交。
+> B01–B03 三批合并在同一个提交 `fa278b5`（分支 `feature/user-login`）中；B04-1 单独提交于 `feat/backend-b04-qa-core`（`c79fbc1`）；B04-2 同分支后续提交 `4012abe`。B05-1 提交于 `f7e8c48`、B05-2 提交于 `69643a8`（均在分支 `feat/backend-b05-reputation-ledger`）；B06 同分支继续开发，完成时仍在工作区、尚未提交。
 
 ## 全局约束（所有批次共同遵守）
 
@@ -35,9 +36,11 @@
 
 ## 当前进度
 
-- 已完成：B01–B03（P0 身份/课程平台能力）、B04-1（co-qa 的 S2 全部 30 处 TODO）、B04-2（问答治理增强）、B05-1（S3 全部 71 处 TODO 清零）、B05-2（撤销冲正与积分分账）。**B05 整批收口**。
-- 基线状态：`TODO(S2)` / `TODO(S3)` 在 `backend/` 内已全部清零，`mvn -B test` 可一路跑到 `co-bootstrap`（27/27 模块 SUCCESS，154 条测试，含 ArchUnit）。
-- 覆盖率门禁：`co-identity-domain` / `co-qa-domain` / `co-reputation-domain` 均设 `domain.coverage.minimum=0.70`；`co-reputation-domain` 实测 **82.49%**。`co-discovery-domain` 尚未设（回落父 pom 的 0），留待后续批次决策。
-- 账本形态：`rep_ledger` 单表只追加，用 `ReputationReason.Currency` 区分声誉/积分；`reverses_event_id` 记录冲正关联；FF-8 对账只统计 REPUTATION 币种。
+- 已完成：B01–B03（P0 身份/课程平台能力）、B04-1（co-qa 的 S2 全部 30 处 TODO）、B04-2（问答治理增强）、B05-1（S3 全部 71 处 TODO 清零）、B05-2（撤销冲正与积分分账，**B05 整批收口**）、**B06（悬赏与课程预算）**。
+- 基线状态：`TODO(S2)` / `TODO(S3)` 在 `backend/` 内已全部清零，`mvn -B test` 可一路跑到 `co-bootstrap`（27/27 模块 SUCCESS，**217 条测试**，含 ArchUnit）。
+- 覆盖率门禁：`co-identity-domain` / `co-qa-domain` / `co-reputation-domain` 均设 `domain.coverage.minimum=0.70`；`co-reputation-domain` 实测 **92.54%**。`co-discovery-domain` 尚未设（回落父 pom 的 0），留待后续批次决策。
+- 账本形态：`rep_ledger` 单表只追加，用 `ReputationReason.Currency` 区分声誉/积分；`reverses_event_id` 记录冲正关联；FF-8 对账只统计 REPUTATION 币种。课程预算走 `rep_course_budget` + `rep_budget_adjustment`，与个人积分**来源分账不混**；待追回走 `rep_points_recovery`。
+- 悬赏：`rep_bounty` 带 `source_type/source_id/command_key/disputed/open_slot`，`uk_bounty_open_question` + `uk_bounty_command` + `tryAward/tryExpire` 条件更新共同保证幂等与并发终态；`BOUNTY_AWARDED` 维持 REPUTATION 币种不变。
 - CI 现状：`SPRINT_MODULES` 仍停在 S2（co-shared-kernel + co-identity + co-qa 各子模块）。S3 已可纳入，但 `.github/workflows/ci.yml` 不在 `backend/` 内，需走 PR 由质量负责人推进；推进到 S3 后可按注释删除该变量、恢复全量门禁。
-- 后续：B06（悬赏与课程预算、撤销后积分待追回正式建表）、B09（AI 回答不发奖励）与 T2/T3 新需求。
+- **FlowIT / 完整装配（Docker 就绪后补验，2026-11-25）**：`mvn -B verify` 已能启动 MySQL 8 + Redis 7 Testcontainers，**10 个 Flyway 迁移全部应用成功**（含 B05-2 / B06 两个新迁移），Spring 上下文完整启动，B06 新增 bean 无装配歧义。但 failsafe 的 7 条 IT 有 **4 条失败，均为既有基线缺陷**：`co-qa` 的 `QuestionJpaEntity.updatedAt` 为 null 撞上 `qa_question.updated_at NOT NULL`（FlowIT 两个用例 409）、`co-bootstrap` 的 `PlatformFoundationsIT` 两个用例未开事务却调 `MANDATORY` 方法。详见 B06 文档第 8/9 节；修复需另开批次并获授权。
+- 后续：B07（搜索/通知/排行榜增强）、B09（AI 回答不发奖励）、B10（教师审核队列，含悬赏 `disputed` 正式复核）、**修复上述 4 个 IT 既有缺陷**与 T4/T5 新需求。
