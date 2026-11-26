@@ -1,6 +1,6 @@
 import type {
-  Course, CourseMember, CourseRole, LeaderboardEntry, Me, Notification, Page, QuestionDetail,
-  QuestionSummary, ReputationProfile, SearchResult,
+  Bounty, Course, CourseMember, CourseRole, LeaderboardEntry, Me, Notification, Page, QuestionDetail,
+  QuestionSummary, ReputationLedgerEntry, ReputationProfile, SearchResult, UserProfile,
 } from './types';
 
 /** 后端以 RFC 9457 Problem Details 返回错误，这里统一转成带业务码的异常。 */
@@ -124,7 +124,12 @@ export const api = {
   deleteAnswer: (answerId: number) => request<void>('DELETE', `/v1/answers/${answerId}`),
   accept: (questionId: number, answerId: number) =>
     request<void>('PUT', `/v1/questions/${questionId}/accepted-answer`, { answerId }),
+  unaccept: (questionId: number) => request<void>('DELETE', `/v1/questions/${questionId}/accepted-answer`),
+  reviewAcceptance: (questionId: number, expectedVersion: number, reason: string) =>
+    request<{ id: number }>('POST', `/v1/questions/${questionId}/acceptance-reviews`, { expectedVersion, reason }),
   endorse: (answerId: number) => request<void>('POST', `/v1/answers/${answerId}/endorsement`, {}),
+  revokeEndorsement: (answerId: number, reason: string) =>
+    request<void>('DELETE', `/v1/answers/${answerId}/endorsement`, { reason }),
   vote: (targetType: 'QUESTION' | 'ANSWER', targetId: number, value: number) =>
     request<{ myVote: number; scoreDelta: number }>('PUT', '/v1/votes', { targetType, targetId, value }),
   comment: (targetType: 'QUESTION' | 'ANSWER', targetId: number, body: string, parentId?: number) =>
@@ -144,7 +149,11 @@ export const api = {
   popularTags: () => get<{ name: string; questionCount: number }[]>('/v1/tags/popular?limit=15'),
 
   leaderboard: (period: string) => get<LeaderboardEntry[]>(`/v1/leaderboard?period=${period}`),
+  userProfile: (userId: number) => get<UserProfile>(`/v1/users/${userId}/profile`),
   reputation: (userId: number) => get<ReputationProfile>(`/v1/users/${userId}/reputation`),
+  reputationLedger: (userId: number, page = 1, size = 20) =>
+    get<Page<ReputationLedgerEntry>>(`/v1/users/${userId}/reputation/ledger?page=${page}&size=${size}`),
+  getBounty: (questionId: number) => get<Bounty | undefined>(`/v1/questions/${questionId}/bounty`),
   bounty: (questionId: number, points: number, days: number) =>
     request<{ id: number }>('POST', `/v1/questions/${questionId}/bounty`, { points, days }),
 

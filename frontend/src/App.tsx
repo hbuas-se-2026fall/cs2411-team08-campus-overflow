@@ -13,6 +13,8 @@ import { LoginPage } from './pages/LoginPage';
 import { NotificationsPage } from './pages/NotificationsPage';
 import { QuestionDetailPage } from './pages/QuestionDetailPage';
 import { QuestionListPage } from './pages/QuestionListPage';
+import { PointsPage } from './pages/PointsPage';
+import { UserProfilePage } from './pages/UserProfilePage';
 
 const roleLabels = { STUDENT: '学生', TA: '助教', TEACHER: '教师', ADMIN: '管理员' } as const;
 
@@ -42,7 +44,7 @@ function Header() {
       <div className="spacer" />
       {currentCourse && <Link className="course-context" to="/courses">{currentCourse.code} · {currentCourse.name}</Link>}
       {me ? <div className="user">
-        <span>{me.displayName}{me.verified && <span className="verified" title="账号身份已认证">已认证</span>}</span>
+        <Link to={'/users/' + me.id}>{me.displayName}{me.verified && <span className="verified" title="账号身份已认证">已认证</span>}</Link>
         <span className="role">{roleLabels[me.role]}</span>
         <button onClick={async () => { await logout(); navigate('/login', { replace: true }); }}>退出</button>
       </div> : <Link className="primary" to="/login">登录 / 注册</Link>}
@@ -75,6 +77,8 @@ function AppLayout() {
       <Route path="/courses/:courseId/questions" element={<RequireAuth><CourseQuestionsPage /></RequireAuth>} />
       <Route path="/courses/:courseId/members" element={<RequireAuth><CourseMembersPage /></RequireAuth>} />
       <Route path="/leaderboard" element={<LeaderboardPage />} />
+      <Route path="/users/:userId" element={<RequireAuth><UserProfilePage /></RequireAuth>} />
+      <Route path="/me/points" element={<RequireAuth><PointsPage /></RequireAuth>} />
       <Route path="/notifications" element={<RequireAuth><NotificationsPage /></RequireAuth>} />
       <Route path="*" element={<NotFoundPage />} />
     </Routes></main>
