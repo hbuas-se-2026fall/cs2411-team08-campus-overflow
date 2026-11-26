@@ -13,12 +13,20 @@ import com.campusoverflow.reputation.domain.BadgeType;
 import com.campusoverflow.reputation.domain.Bounty;
 import com.campusoverflow.reputation.domain.BountyRepository;
 import com.campusoverflow.reputation.domain.BountyStatus;
+import com.campusoverflow.reputation.domain.BudgetAdjustment;
+import com.campusoverflow.reputation.domain.CourseBudget;
+import com.campusoverflow.reputation.domain.CourseBudgetRepository;
 import com.campusoverflow.reputation.domain.LedgerEntry;
 import com.campusoverflow.reputation.domain.LedgerRepository;
+import com.campusoverflow.reputation.domain.PointsRecovery;
+import com.campusoverflow.reputation.domain.PointsRecoveryRepository;
+import com.campusoverflow.reputation.domain.PointsRecoveryStatus;
 import com.campusoverflow.reputation.domain.ReputationAccount;
 import com.campusoverflow.reputation.domain.ReputationAccountRepository;
 import com.campusoverflow.reputation.domain.ReputationReason;
 import com.campusoverflow.shared.audit.AuditTrail;
+import com.campusoverflow.shared.command.CommandIdempotencyStore;
+import com.campusoverflow.shared.domain.ConflictException;
 import com.campusoverflow.shared.event.IntegrationEvent;
 import com.campusoverflow.shared.event.IntegrationEventPublisher;
 import com.campusoverflow.shared.event.ProcessedEventStore;
@@ -195,6 +203,9 @@ public final class ReputationFixtures {
 
     public static class InMemoryBounties implements BountyRepository {
         private final Map<Long, Bounty> store = new LinkedHashMap<>();
+        private final Set<Long> terminal = new HashSet<>();
+        private final Set<Long> openQuestions = new HashSet<>();
+        private final Set<String> commandKeys = new HashSet<>();
         private long sequence;
 
         @Override
@@ -219,10 +230,47 @@ public final class ReputationFixtures {
         @Override
         public Bounty save(Bounty bounty) {
             if (bounty.id() == null) {
+                if (bounty.commandKey() != null && !commandKeys.add(bounty.commandKey())) {
+                    throw new ConflictException("REP-2008", "命令键重复");
+                }
+                if (bounty.status() == BountyStatus.OPEN && !openQuestions.add(bounty.questionId())) {
+                    throw new ConflictException("REP-2008", "该问题已有开放悬赏");
+                }
                 bounty.assignId(++sequence);
             }
             store.put(bounty.id(), bounty);
             return bounty;
+        }
+
+        @Override
+        public boolean tryAward(long bountyId, long answerId, long winnerId, Instant now) {
+            releaseOpenSlot(bountyId);
+            return terminal.add(bountyId);
+        }
+
+        @Override
+        public boolean tryExpire(long bountyId, Instant now) {
+            releaseOpenSlot(bountyId);
+            return terminal.add(bountyId);
+        }
+
+        @Override
+        public void markDisputed(long bountyId) {
+            Bounty b = store.get(bountyId);
+            if (b != null) {
+                b.markDisputed();
+            }
+        }
+
+        private void releaseOpenSlot(long bountyId) {
+            Bounty b = store.get(bountyId);
+            if (b != null) {
+                openQuestions.remove(b.questionId());
+            }
+        }
+
+        public Bounty get(long id) {
+            return store.get(id);
         }
     }
 
@@ -350,6 +398,109 @@ public final class ReputationFixtures {
         @Override
         public boolean markProcessed(String eventId, String consumer) {
             return keys.add(consumer + ":" + eventId);
+        }
+    }
+
+    public static class InMemoryBudgets implements CourseBudgetRepository {
+        private final Map<Long, CourseBudget> store = new LinkedHashMap<>();
+        public final List<BudgetAdjustment> adjustments = new ArrayList<>();
+
+        @Override
+        public Optional<CourseBudget> findByCourseId(long courseId) {
+            return Optional.ofNullable(store.get(courseId));
+        }
+
+        @Override
+        public CourseBudget save(CourseBudget budget) {
+            store.put(budget.courseId(), budget);
+            return budget;
+        }
+
+        @Override
+        public void append(BudgetAdjustment adjustment) {
+            adjustments.add(BudgetAdjustment.reconstitute((long) (adjustments.size() + 1), adjustment.courseId(),
+                    adjustment.delta(), adjustment.source(), adjustment.operatorId(), adjustment.reason(),
+                    adjustment.eventId(), adjustment.createdAt()));
+        }
+
+        @Override
+        public PageResult<BudgetAdjustment> findAdjustments(long courseId, PageRequest page) {
+            List<BudgetAdjustment> mine = adjustments.stream().filter(a -> a.courseId() == courseId).toList();
+            return new PageResult<>(mine, mine.size(), page.page(), page.size());
+        }
+
+        @Override
+        public boolean exists(String eventId, long courseId) {
+            return adjustments.stream().anyMatch(a -> a.eventId().equals(eventId) && a.courseId() == courseId);
+        }
+
+        public CourseBudget get(long courseId) {
+            return store.get(courseId);
+        }
+    }
+
+    public static class InMemoryRecoveries implements PointsRecoveryRepository {
+        private final Map<Long, PointsRecovery> store = new LinkedHashMap<>();
+        private long sequence;
+
+        @Override
+        public Optional<PointsRecovery> findPendingByUser(long userId) {
+            return store.values().stream()
+                    .filter(r -> r.userId() == userId && r.status() == PointsRecoveryStatus.PENDING)
+                    .findFirst();
+        }
+
+        @Override
+        public Optional<PointsRecovery> findById(long id) {
+            return Optional.ofNullable(store.get(id));
+        }
+
+        @Override
+        public PointsRecovery save(PointsRecovery recovery) {
+            if (recovery.id() == null) {
+                recovery.assignId(++sequence);
+            }
+            store.put(recovery.id(), recovery);
+            return recovery;
+        }
+
+        @Override
+        public PageResult<PointsRecovery> findAll(PageRequest page) {
+            List<PointsRecovery> all = List.copyOf(store.values());
+            return new PageResult<>(all, all.size(), page.page(), page.size());
+        }
+    }
+
+    public static class InMemoryIdempotency implements CommandIdempotencyStore {
+        private final Map<String, String> results = new HashMap<>();
+        private final Map<String, Instant> running = new HashMap<>();
+
+        @Override
+        public BeginOutcome begin(String key, Duration ttl, Instant now) {
+            if (results.containsKey(key)) {
+                return BeginOutcome.ALREADY_SUCCEEDED;
+            }
+            if (running.containsKey(key)) {
+                return BeginOutcome.IN_PROGRESS;
+            }
+            running.put(key, now);
+            return BeginOutcome.EXECUTE;
+        }
+
+        @Override
+        public void complete(String key, String resultJson, Instant now) {
+            running.remove(key);
+            results.put(key, resultJson);
+        }
+
+        @Override
+        public Optional<String> resultOf(String key) {
+            return Optional.ofNullable(results.get(key));
+        }
+
+        /** 测试用：模拟另一个请求正在处理同一键。 */
+        public void markRunning(String key, Instant now) {
+            running.put(key, now);
         }
     }
 }

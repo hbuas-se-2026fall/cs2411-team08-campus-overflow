@@ -5,12 +5,14 @@ import com.campusoverflow.reputation.domain.BadgeRepository;
 import com.campusoverflow.reputation.domain.BadgeType;
 import com.campusoverflow.reputation.domain.Bounty;
 import com.campusoverflow.reputation.domain.BountyRepository;
+import com.campusoverflow.reputation.domain.BountySource;
 import com.campusoverflow.reputation.domain.BountyStatus;
 import com.campusoverflow.reputation.domain.LedgerEntry;
 import com.campusoverflow.reputation.domain.LedgerRepository;
 import com.campusoverflow.reputation.domain.ReputationAccount;
 import com.campusoverflow.reputation.domain.ReputationAccountRepository;
 import com.campusoverflow.reputation.domain.ReputationReason;
+import com.campusoverflow.shared.domain.ConflictException;
 import com.campusoverflow.shared.page.PageRequest;
 import com.campusoverflow.shared.page.PageResult;
 import java.time.Instant;
@@ -19,6 +21,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.data.domain.Page;
 import org.springframework.stereotype.Repository;
 
@@ -186,17 +189,44 @@ public class ReputationPersistenceAdapter
         e.setWinnerId(b.winnerId());
         e.setAnswerId(b.answerId());
         e.setClosedAt(b.closedAt());
-        BountyJpaEntity saved = bounties.save(e);
-        if (b.id() == null) {
-            b.assignId(saved.getId());
+        e.setSourceType(b.source().name());
+        e.setSourceId(b.sourceId());
+        e.setCommandKey(b.commandKey());
+        e.setDisputed(b.disputed());
+        // OPEN 时占用唯一槽位，终态释放；一问题最多一个开放悬赏由 uk_bounty_open_question 保证
+        e.setOpenSlot(b.status() == BountyStatus.OPEN ? b.questionId() : null);
+        try {
+            // saveAndFlush：让唯一约束冲突在本方法内抛出，才能转译成领域冲突异常
+            BountyJpaEntity saved = bounties.saveAndFlush(e);
+            if (b.id() == null) {
+                b.assignId(saved.getId());
+            }
+            return b;
+        } catch (DataIntegrityViolationException ex) {
+            throw new ConflictException("REP-2008", "该问题已有开放悬赏，或命令键重复");
         }
-        return b;
+    }
+
+    @Override
+    public boolean tryAward(long bountyId, long answerId, long winnerId, Instant now) {
+        return bounties.awardIfOpen(bountyId, answerId, winnerId, now) == 1;
+    }
+
+    @Override
+    public boolean tryExpire(long bountyId, Instant now) {
+        return bounties.expireIfOpen(bountyId, now) == 1;
+    }
+
+    @Override
+    public void markDisputed(long bountyId) {
+        bounties.markDisputed(bountyId);
     }
 
     private static Bounty toDomain(BountyJpaEntity e) {
         return Bounty.reconstitute(e.getId(), e.getQuestionId(), e.getSponsorId(), e.getPoints(),
+                BountySource.valueOf(e.getSourceType()), e.getSourceId(), e.getCommandKey(),
                 BountyStatus.valueOf(e.getStatus()), e.getCreatedAt(), e.getExpiresAt(), e.getWinnerId(),
-                e.getAnswerId(), e.getClosedAt());
+                e.getAnswerId(), e.getClosedAt(), e.isDisputed());
     }
 
     // ---------------- BadgeRepository ----------------
