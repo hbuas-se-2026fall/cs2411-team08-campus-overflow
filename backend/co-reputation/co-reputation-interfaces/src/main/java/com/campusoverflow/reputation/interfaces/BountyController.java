@@ -2,6 +2,7 @@ package com.campusoverflow.reputation.interfaces;
 
 import com.campusoverflow.reputation.application.BountyService;
 import com.campusoverflow.reputation.application.BountyView;
+import com.campusoverflow.reputation.domain.BountySource;
 import com.campusoverflow.shared.security.Actor;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
@@ -37,14 +38,21 @@ public class BountyController {
         return bounties.latest(questionId).map(ResponseEntity::ok).orElseGet(() -> ResponseEntity.noContent().build());
     }
 
-    @Operation(summary = "发起悬赏（课程教师/助教/管理员，冻结积分）")
+    @Operation(summary = "发起悬赏（个人账户或课程预算；commandId 防重复提交）")
     @PostMapping
     public ResponseEntity<Map<String, Long>> open(@Parameter(hidden = true) Actor actor, @PathVariable long questionId,
                                                   @Valid @RequestBody BountyRequest req) {
-        long id = bounties.open(actor, questionId, req.points(), req.days());
+        BountySource source = req.source() == null ? BountySource.PERSONAL : req.source();
+        long id = bounties.open(actor, questionId, req.points(), req.days(), req.commandId(), source, req.courseId());
         return ResponseEntity.status(HttpStatus.CREATED).body(Map.of("id", id));
     }
 
-    public record BountyRequest(@NotNull @Min(10) @Max(500) Integer points, @NotNull @Min(1) @Max(14) Integer days) {
+    public record BountyRequest(@NotNull @Min(10) @Max(500) Integer points, @NotNull @Min(1) @Max(14) Integer days,
+                                String commandId, BountySource source, Long courseId) {
+
+        /** 兼容 B05 的两字段请求体。 */
+        public BountyRequest(Integer points, Integer days) {
+            this(points, days, null, BountySource.PERSONAL, null);
+        }
     }
 }

@@ -22,13 +22,13 @@ public class ReputationApiImpl implements ReputationApi {
 
     @Override
     public ReputationSummary summary(long userId) {
-        // TODO(S3)：实现 ReputationApiImpl.summary——参考领域单元测试与 arc42 文档中的业务规则
-        throw new UnsupportedOperationException("TODO(S3)：ReputationApiImpl.summary 尚未实现");
+        int reputation = accounts.findByUserId(userId).map(ReputationAccount::reputation).orElse(0);
+        return new ReputationSummary(userId, reputation);
     }
 
     @Override
     public Map<Long, Integer> reputations(Collection<Long> userIds) {
-        // TODO(S3)：实现 ReputationApiImpl.reputations——参考领域单元测试与 arc42 文档中的业务规则
-        throw new UnsupportedOperationException("TODO(S3)：ReputationApiImpl.reputations 尚未实现");
+        return accounts.findAllByUserId(userIds).stream()
+                .collect(Collectors.toMap(ReputationAccount::userId, ReputationAccount::reputation));
     }
 }

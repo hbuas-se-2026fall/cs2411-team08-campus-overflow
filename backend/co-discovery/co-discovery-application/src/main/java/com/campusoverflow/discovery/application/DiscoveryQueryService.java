@@ -29,12 +29,28 @@ public class DiscoveryQueryService {
     }
 
     public PageResult<SearchResultView> search(SearchQuery query) {
-        // TODO(S3)：实现 DiscoveryQueryService.search——参考领域单元测试与 arc42 文档中的业务规则
-        throw new UnsupportedOperationException("TODO(S3)：DiscoveryQueryService.search 尚未实现");
+        PageResult<SearchHit> hits = search.search(query);
+        Map<Long, UserSummary> users = identity.findUsers(hits.items().stream().map(SearchHit::authorId).toList());
+        return hits.map(hit -> {
+            UserSummary user = users.get(hit.authorId());
+            SearchResultView.Author author = user == null
+                    ? new SearchResultView.Author(hit.authorId(), "未知用户", "STUDENT", false)
+                    : new SearchResultView.Author(user.id(), user.displayName(), user.role().name(), user.verified());
+            return new SearchResultView(hit.questionId(), hit.title(), hit.snippet(), hit.tags(), hit.courseId(),
+                    author, hit.score(), hit.answerCount(), hit.accepted(), hit.bountyOpen(), hit.createdAt());
+        });
     }
 
     public List<RelatedQuestionView> related(long questionId, int limit) {
-        // TODO(S3)：实现 DiscoveryQueryService.related——参考领域单元测试与 arc42 文档中的业务规则
-        throw new UnsupportedOperationException("TODO(S3)：DiscoveryQueryService.related 尚未实现");
+        List<String> tags = index.findTags(questionId);
+        if (tags.isEmpty()) {
+            return List.of();
+        }
+        List<SearchIndex.RelatedCandidate> candidates = index.findCandidatesSharingTags(questionId, tags,
+                Math.max(limit, 1) * 4);
+        return RelatedQuestionPolicy.rank(candidates, tags.size(), limit).stream()
+                .map(c -> new RelatedQuestionView(c.questionId(), c.title(), c.answerCount(), c.accepted(),
+                        RelatedQuestionPolicy.jaccard(c.sharedTags(), tags.size(), c.tagCount())))
+                .toList();
     }
 }

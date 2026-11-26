@@ -14,7 +14,7 @@ import com.campusoverflow.qa.api.event.AnswerSubmittedEvent;
 import com.campusoverflow.qa.api.event.CommentPostedEvent;
 import com.campusoverflow.reputation.api.event.BadgeAwardedEvent;
 import com.campusoverflow.reputation.api.event.BountyAwardedEvent;
-import java.util.Optional;
+import java.util.Set;
 import org.springframework.context.event.EventListener;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
@@ -36,53 +36,59 @@ public class NotificationProjector {
     @EventListener
     @Transactional
     public void on(AnswerSubmittedEvent e) {
-        // TODO(S3)：实现 NotificationProjector.on——参考领域单元测试与 arc42 文档中的业务规则
-        throw new UnsupportedOperationException("TODO(S3)：NotificationProjector.on 尚未实现");
+        notify(e.questionAuthorId(), NotificationType.ANSWER_RECEIVED, name(e.answerAuthorId()) + " 回答了你的问题",
+                "/questions/" + e.questionId(), e.eventId(), e.occurredAt());
     }
 
     @EventListener
     @Transactional
     public void on(AnswerAcceptedEvent e) {
-        // TODO(S3)：实现 NotificationProjector.on——参考领域单元测试与 arc42 文档中的业务规则
-        throw new UnsupportedOperationException("TODO(S3)：NotificationProjector.on 尚未实现");
+        notify(e.answerAuthorId(), NotificationType.ANSWER_ACCEPTED, "你的回答被采纳",
+                "/questions/" + e.questionId(), e.eventId(), e.occurredAt());
     }
 
     @EventListener
     @Transactional
     public void on(AnswerEndorsedEvent e) {
-        // TODO(S3)：实现 NotificationProjector.on——参考领域单元测试与 arc42 文档中的业务规则
-        throw new UnsupportedOperationException("TODO(S3)：NotificationProjector.on 尚未实现");
+        notify(e.answerAuthorId(), NotificationType.ANSWER_ENDORSED, "你的回答获得教师认证",
+                "/questions/" + e.questionId(), e.eventId(), e.occurredAt());
     }
 
     @EventListener
     @Transactional
     public void on(CommentPostedEvent e) {
-        // TODO(S3)：实现 NotificationProjector.on——参考领域单元测试与 arc42 文档中的业务规则
-        throw new UnsupportedOperationException("TODO(S3)：NotificationProjector.on 尚未实现");
+        for (String nickname : MentionParser.extract(e.body())) {
+            identity.findByDisplayName(nickname)
+                    .filter(user -> user.id() != e.authorId())
+                    .ifPresent(user -> notify(user.id(), NotificationType.MENTIONED,
+                            name(e.authorId()) + " 在评论中提到了你", "/questions/" + e.questionId(), e.eventId(),
+                            e.occurredAt()));
+        }
     }
 
     @EventListener
     @Transactional
     public void on(BountyAwardedEvent e) {
-        // TODO(S3)：实现 NotificationProjector.on——参考领域单元测试与 arc42 文档中的业务规则
-        throw new UnsupportedOperationException("TODO(S3)：NotificationProjector.on 尚未实现");
+        notify(e.winnerId(), NotificationType.BOUNTY_AWARDED, "你赢得了悬赏 " + e.points() + " 积分",
+                "/questions/" + e.questionId(), e.eventId(), e.occurredAt());
     }
 
     @EventListener
     @Transactional
     public void on(BadgeAwardedEvent e) {
-        // TODO(S3)：实现 NotificationProjector.on——参考领域单元测试与 arc42 文档中的业务规则
-        throw new UnsupportedOperationException("TODO(S3)：NotificationProjector.on 尚未实现");
+        notify(e.userId(), NotificationType.BADGE_AWARDED, "获得新徽章：" + e.badgeName(),
+                "/users/" + e.userId() + "/reputation", e.eventId(), e.occurredAt());
     }
 
     private void notify(long recipientId, NotificationType type, String title, String link, String eventId,
                         java.time.Instant at) {
-        // TODO(S3)：实现 NotificationProjector.notify——参考领域单元测试与 arc42 文档中的业务规则
-        throw new UnsupportedOperationException("TODO(S3)：NotificationProjector.notify 尚未实现");
+        if (notifications.exists(eventId, recipientId)) {
+            return;
+        }
+        notifications.save(Notification.create(recipientId, type, title, link, eventId, at));
     }
 
     private String name(long userId) {
-        // TODO(S3)：实现 NotificationProjector.name——参考领域单元测试与 arc42 文档中的业务规则
-        throw new UnsupportedOperationException("TODO(S3)：NotificationProjector.name 尚未实现");
+        return identity.findUser(userId).map(UserSummary::displayName).orElse("某用户");
     }
 }

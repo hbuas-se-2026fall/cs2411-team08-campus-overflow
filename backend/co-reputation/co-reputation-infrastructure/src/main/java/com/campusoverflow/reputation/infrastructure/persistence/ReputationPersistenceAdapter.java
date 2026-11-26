@@ -5,12 +5,14 @@ import com.campusoverflow.reputation.domain.BadgeRepository;
 import com.campusoverflow.reputation.domain.BadgeType;
 import com.campusoverflow.reputation.domain.Bounty;
 import com.campusoverflow.reputation.domain.BountyRepository;
+import com.campusoverflow.reputation.domain.BountySource;
 import com.campusoverflow.reputation.domain.BountyStatus;
 import com.campusoverflow.reputation.domain.LedgerEntry;
 import com.campusoverflow.reputation.domain.LedgerRepository;
 import com.campusoverflow.reputation.domain.ReputationAccount;
 import com.campusoverflow.reputation.domain.ReputationAccountRepository;
 import com.campusoverflow.reputation.domain.ReputationReason;
+import com.campusoverflow.shared.domain.ConflictException;
 import com.campusoverflow.shared.page.PageRequest;
 import com.campusoverflow.shared.page.PageResult;
 import java.time.Instant;
@@ -19,6 +21,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.data.domain.Page;
 import org.springframework.stereotype.Repository;
 
@@ -90,23 +93,54 @@ public class ReputationPersistenceAdapter
     @Override
     public void append(LedgerEntry entry) {
         ledger.save(new LedgerJpaEntity(entry.userId(), entry.eventId(), entry.reason().name(), entry.delta(),
-                entry.refType(), entry.refId(), entry.createdAt()));
+                entry.refType(), entry.refId(), entry.createdAt(), entry.reversesEventId()));
     }
 
     @Override
     public PageResult<LedgerEntry> findByUser(long userId, PageRequest page) {
         Page<LedgerJpaEntity> p = ledger.findByUserIdOrderByIdDesc(userId,
                 org.springframework.data.domain.PageRequest.of(page.page() - 1, page.size()));
-        return new PageResult<>(p.getContent().stream()
-                .map(e -> new LedgerEntry(e.getId(), e.getUserId(), e.getEventId(),
-                        ReputationReason.valueOf(e.getReason()), e.getDelta(), e.getRefType(), e.getRefId(),
-                        e.getCreatedAt()))
-                .toList(), p.getTotalElements(), page.page(), page.size());
+        return new PageResult<>(p.getContent().stream().map(ReputationPersistenceAdapter::toDomain).toList(),
+                p.getTotalElements(), page.page(), page.size());
+    }
+
+    @Override
+    public PageResult<LedgerEntry> findReputationByUser(long userId, PageRequest page) {
+        return findByCurrency(userId, ReputationReason.Currency.REPUTATION, page);
+    }
+
+    @Override
+    public PageResult<LedgerEntry> findPointsByUser(long userId, PageRequest page) {
+        return findByCurrency(userId, ReputationReason.Currency.POINTS, page);
+    }
+
+    private PageResult<LedgerEntry> findByCurrency(long userId, ReputationReason.Currency currency, PageRequest page) {
+        Page<LedgerJpaEntity> p = ledger.findByUserIdAndReasonInOrderByIdDesc(userId,
+                ReputationReason.namesOf(currency),
+                org.springframework.data.domain.PageRequest.of(page.page() - 1, page.size()));
+        return new PageResult<>(p.getContent().stream().map(ReputationPersistenceAdapter::toDomain).toList(),
+                p.getTotalElements(), page.page(), page.size());
+    }
+
+    @Override
+    public Optional<LedgerEntry> findReversible(long userId, ReputationReason reason, String refType, long refId) {
+        return ledger.findLatestReversible(userId, reason.name(), refType, refId)
+                .map(ReputationPersistenceAdapter::toDomain);
+    }
+
+    @Override
+    public boolean existsReversalOf(String originalEventId, long userId, ReputationReason reason) {
+        return ledger.existsByReversesEventIdAndUserIdAndReason(originalEventId, userId, reason.name());
+    }
+
+    private static LedgerEntry toDomain(LedgerJpaEntity e) {
+        return new LedgerEntry(e.getId(), e.getUserId(), e.getEventId(), ReputationReason.valueOf(e.getReason()),
+                e.getDelta(), e.getRefType(), e.getRefId(), e.getCreatedAt(), e.getReversesEventId());
     }
 
     @Override
     public long countByUserAndReason(long userId, ReputationReason reason) {
-        return ledger.countByUserIdAndReason(userId, reason.name());
+        return ledger.countPositiveByUserIdAndReason(userId, reason.name());
     }
 
     @Override
@@ -119,7 +153,8 @@ public class ReputationPersistenceAdapter
     @Override
     public Map<Long, Long> sumByUser() {
         Map<Long, Long> result = new HashMap<>();
-        for (Object[] row : ledger.sumGroupByUser()) {
+        for (Object[] row : ledger.sumGroupByUser(
+                ReputationReason.namesOf(ReputationReason.Currency.REPUTATION))) {
             result.put(((Number) row[0]).longValue(), ((Number) row[1]).longValue());
         }
         return result;
@@ -154,17 +189,44 @@ public class ReputationPersistenceAdapter
         e.setWinnerId(b.winnerId());
         e.setAnswerId(b.answerId());
         e.setClosedAt(b.closedAt());
-        BountyJpaEntity saved = bounties.save(e);
-        if (b.id() == null) {
-            b.assignId(saved.getId());
+        e.setSourceType(b.source().name());
+        e.setSourceId(b.sourceId());
+        e.setCommandKey(b.commandKey());
+        e.setDisputed(b.disputed());
+        // OPEN 时占用唯一槽位，终态释放；一问题最多一个开放悬赏由 uk_bounty_open_question 保证
+        e.setOpenSlot(b.status() == BountyStatus.OPEN ? b.questionId() : null);
+        try {
+            // saveAndFlush：让唯一约束冲突在本方法内抛出，才能转译成领域冲突异常
+            BountyJpaEntity saved = bounties.saveAndFlush(e);
+            if (b.id() == null) {
+                b.assignId(saved.getId());
+            }
+            return b;
+        } catch (DataIntegrityViolationException ex) {
+            throw new ConflictException("REP-2008", "该问题已有开放悬赏，或命令键重复");
         }
-        return b;
+    }
+
+    @Override
+    public boolean tryAward(long bountyId, long answerId, long winnerId, Instant now) {
+        return bounties.awardIfOpen(bountyId, answerId, winnerId, now) == 1;
+    }
+
+    @Override
+    public boolean tryExpire(long bountyId, Instant now) {
+        return bounties.expireIfOpen(bountyId, now) == 1;
+    }
+
+    @Override
+    public void markDisputed(long bountyId) {
+        bounties.markDisputed(bountyId);
     }
 
     private static Bounty toDomain(BountyJpaEntity e) {
         return Bounty.reconstitute(e.getId(), e.getQuestionId(), e.getSponsorId(), e.getPoints(),
+                BountySource.valueOf(e.getSourceType()), e.getSourceId(), e.getCommandKey(),
                 BountyStatus.valueOf(e.getStatus()), e.getCreatedAt(), e.getExpiresAt(), e.getWinnerId(),
-                e.getAnswerId(), e.getClosedAt());
+                e.getAnswerId(), e.getClosedAt(), e.isDisputed());
     }
 
     // ---------------- BadgeRepository ----------------
