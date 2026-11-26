@@ -19,9 +19,11 @@
 | [B02-账号与个人资料.md](B02-账号与个人资料.md) | B02 | 2026-11-04 | 账号与个人资料：资料双视图、昵称唯一、登录限流 429 | `fa278b5` |
 | [B03-课程生命周期与成员权限.md](B03-课程生命周期与成员权限.md) | B03 | 2026-11-04 | 课程生命周期：归档/重开、成员软删除、授权与权限失效 | `fa278b5` |
 | [B04-1-问答核心.md](B04-1-问答核心.md) | B04-1 | 2026-11-12 | 问答核心：清零 co-qa 全部 30 处 S2 TODO | `c79fbc1` |
-| [B04-2-问题状态机与采纳复核.md](B04-2-问题状态机与采纳复核.md) | B04-2 | 2026-11-19 | 问题状态机、撤销采纳、教师复核、认证历史、回答来源与分页 | 待提交 |
+| [B04-2-问题状态机与采纳复核.md](B04-2-问题状态机与采纳复核.md) | B04-2 | 2026-11-19 | 问题状态机、撤销采纳、教师复核、认证历史、回答来源与分页 | `4012abe` |
+| [B05-声誉积分与冲正.md](B05-声誉积分与冲正.md) | B05-1 | 2026-11-23 | 清零 S3 全部 71 处 TODO：声誉账本、悬赏结算、徽章、搜索投影、通知基线 | `f7e8c48` |
+| [B05-2-撤销冲正与积分分账.md](B05-2-撤销冲正与积分分账.md) | B05-2 | 2026-11-25 | 撤销冲正闭环、`reverses_event_id`、声誉/积分分账、`/users/me/points` 双端点、展示下限 0 | 待提交 |
 
-> B01–B03 三批合并在同一个提交 `fa278b5`（分支 `feature/user-login`）中；B04-1 单独提交于 `feat/backend-b04-qa-core`；B04-2 完成时仍在工作区、尚未提交。
+> B01–B03 三批合并在同一个提交 `fa278b5`（分支 `feature/user-login`）中；B04-1 单独提交于 `feat/backend-b04-qa-core`（`c79fbc1`）；B04-2 同分支后续提交 `4012abe`。B05-1 提交于 `f7e8c48`（分支 `feat/backend-b05-reputation-ledger`）；B05-2 同分支继续开发，完成时仍在工作区、尚未提交。
 
 ## 全局约束（所有批次共同遵守）
 
@@ -33,6 +35,9 @@
 
 ## 当前进度
 
-- 已完成：B01–B03（P0 身份/课程平台能力）、B04-1（co-qa 的 S2 全部 30 处 TODO）、B04-2（问答治理增强）。
-- CI 现状：`mvn -B test` 的 qa 四模块全绿；reactor 在 **co-reputation-domain 的 S3 基线红测试**处停止（S3 共 71 处 TODO，属后续批次，非回归）。ArchUnit 与覆盖率门禁因 reactor 提前停止而 SKIPPED，本地单独运行 ArchUnit 已通过。
-- 后续：B05 起处理 S3（co-reputation / co-discovery）与 T2/T3 新需求。
+- 已完成：B01–B03（P0 身份/课程平台能力）、B04-1（co-qa 的 S2 全部 30 处 TODO）、B04-2（问答治理增强）、B05-1（S3 全部 71 处 TODO 清零）、B05-2（撤销冲正与积分分账）。**B05 整批收口**。
+- 基线状态：`TODO(S2)` / `TODO(S3)` 在 `backend/` 内已全部清零，`mvn -B test` 可一路跑到 `co-bootstrap`（27/27 模块 SUCCESS，154 条测试，含 ArchUnit）。
+- 覆盖率门禁：`co-identity-domain` / `co-qa-domain` / `co-reputation-domain` 均设 `domain.coverage.minimum=0.70`；`co-reputation-domain` 实测 **82.49%**。`co-discovery-domain` 尚未设（回落父 pom 的 0），留待后续批次决策。
+- 账本形态：`rep_ledger` 单表只追加，用 `ReputationReason.Currency` 区分声誉/积分；`reverses_event_id` 记录冲正关联；FF-8 对账只统计 REPUTATION 币种。
+- CI 现状：`SPRINT_MODULES` 仍停在 S2（co-shared-kernel + co-identity + co-qa 各子模块）。S3 已可纳入，但 `.github/workflows/ci.yml` 不在 `backend/` 内，需走 PR 由质量负责人推进；推进到 S3 后可按注释删除该变量、恢复全量门禁。
+- 后续：B06（悬赏与课程预算、撤销后积分待追回正式建表）、B09（AI 回答不发奖励）与 T2/T3 新需求。

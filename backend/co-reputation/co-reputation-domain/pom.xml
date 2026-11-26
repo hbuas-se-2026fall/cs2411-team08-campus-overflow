@@ -11,6 +11,9 @@
     <artifactId>co-reputation-domain</artifactId>
     <packaging>jar</packaging>
     <name>Reputation 声誉与激励 :: domain（纯 Java）</name>
+    <properties>
+        <domain.coverage.minimum>0.70</domain.coverage.minimum>
+    </properties>
     <dependencies>
         <dependency>
             <groupId>com.campusoverflow</groupId>

@@ -16,17 +16,24 @@ public final class AcademicTerm {
     }
 
     public static String termKey(Instant at) {
-        // TODO(S3)：实现 AcademicTerm.termKey——参考领域单元测试与 arc42 文档中的业务规则
-        throw new UnsupportedOperationException("TODO(S3)：AcademicTerm.termKey 尚未实现");
+        LocalDate date = at.atZone(CAMPUS_ZONE).toLocalDate();
+        int month = date.getMonthValue();
+        int year = date.getYear();
+        if (month >= 2 && month <= 7) {
+            return year + "-SPRING";
+        }
+        return (month == 1 ? year - 1 : year) + "-FALL";
     }
 
     public static String weekKey(Instant at) {
-        // TODO(S3)：实现 AcademicTerm.weekKey——参考领域单元测试与 arc42 文档中的业务规则
-        throw new UnsupportedOperationException("TODO(S3)：AcademicTerm.weekKey 尚未实现");
+        LocalDate date = at.atZone(CAMPUS_ZONE).toLocalDate();
+        int weekYear = date.get(IsoFields.WEEK_BASED_YEAR);
+        int week = date.get(IsoFields.WEEK_OF_WEEK_BASED_YEAR);
+        return String.format("%d-W%02d", weekYear, week);
     }
 
     public static String monthKey(Instant at) {
-        // TODO(S3)：实现 AcademicTerm.monthKey——参考领域单元测试与 arc42 文档中的业务规则
-        throw new UnsupportedOperationException("TODO(S3)：AcademicTerm.monthKey 尚未实现");
+        LocalDate date = at.atZone(CAMPUS_ZONE).toLocalDate();
+        return String.format("%d-%02d", date.getYear(), date.getMonthValue());
     }
 }
