@@ -28,7 +28,7 @@ export interface Comment { id: number; author: Author; parentId?: number; body: 
 export interface Answer {
   id: number; body: string; bodyHtml: string; author: Author; score: number; accepted: boolean;
   source?: 'HUMAN' | 'AI' | 'AI_ASSISTED'; canDelete?: boolean;
-  endorsedBy?: Author; myVote: number; canEdit: boolean; createdAt: string; comments: Comment[];
+  endorsedBy?: Author; myVote: number; canEdit: boolean; createdAt: string; updatedAt?: string; comments: Comment[];
 }
 
 export interface QuestionDetail {
@@ -37,6 +37,7 @@ export interface QuestionDetail {
   author: Author; score: number; answerCount: number; viewCount: number; acceptedAnswerId?: number;
   myVote: number; createdAt: string;
   permissions: { canEdit: boolean; canDelete: boolean; canAccept: boolean; canManage: boolean };
+  status?: string; canReview?: boolean; canEndorse?: boolean; version?: number;
   comments: Comment[]; answers: Answer[];
 }
 
@@ -46,4 +47,18 @@ export interface Notification { id: number; type: string; title: string; link: s
 export interface ReputationProfile {
   userId: number; displayName: string; reputation: number; availablePoints?: number; frozenPoints?: number;
   badges: { code: string; name: string; description: string; awardedAt: string }[];
+}
+
+export interface UserProfile {
+  id: number; displayName: string; role: Role; verified: boolean; college?: string; createdAt: string;
+  self?: { username: string; email: string; className?: string };
+}
+
+export interface ReputationLedgerEntry {
+  id: number; reason: string; reasonLabel: string; delta: number; refType: string; refId: number; createdAt: string;
+}
+
+export interface Bounty {
+  id: number; questionId: number; sponsorId: number; sponsorName: string; points: number; status: string;
+  createdAt: string; expiresAt: string; winnerId?: number; answerId?: number;
 }
